@@ -1,0 +1,67 @@
+﻿<Window x:Class="GameTranslateOverlay.UI.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GameTranslateOverlay"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        MaxWidth="640">
+    <Border x:Name="PillBorder" Style="{StaticResource HudPillBorder}" MinWidth="280" MaxWidth="640">
+        <StackPanel>
+            <DockPanel Margin="0,0,0,6">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="CopyButton" Content="Copy" Style="{StaticResource SecondaryButtonStyle}" Padding="6,2" Margin="0,0,4,0" FontSize="10" Click="OnCopyClick" />
+                    <ToggleButton x:Name="KeepButton"
+                                  Content="Keep"
+                                  Style="{StaticResource SecondaryToggleButtonStyle}"
+                                  Padding="6,2"
+                                  Margin="0,0,4,0"
+                                  FontSize="10"
+                                  ToolTip="Keep visible — pauses auto-hide until turned off or app restarts"
+                                  Click="OnKeepClick" />
+                    <ToggleButton x:Name="PinButton" Content="Pin" Style="{StaticResource SecondaryToggleButtonStyle}" Padding="6,2" Margin="0,0,4,0" FontSize="10" Click="OnPinClick" />
+                    <Button x:Name="CloseButton"
+                            Content="×"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="8,2"
+                            MinWidth="24"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            ToolTip="Close"
+                            Click="OnCloseClick" />
+                </StackPanel>
+                <Border DockPanel.Dock="Left"
+                        Height="18"
+                        MinWidth="28"
+                        Margin="0,0,8,0"
+                        Background="Transparent"
+                        Cursor="SizeAll"
+                        MouseLeftButtonDown="OnDragHandleDown">
+                    <TextBlock Text="&#x22EE;&#x22EE;"
+                               FontSize="10"
+                               Foreground="{StaticResource HudMutedBrush}"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center" />
+                </Border>
+                <ProgressBar x:Name="LoadingBar" Height="4" IsIndeterminate="True" Visibility="Collapsed" VerticalAlignment="Center" />
+            </DockPanel>
+            <TextBlock x:Name="SourceText"
+                       Text=""
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource HudMutedBrush}"
+                       FontSize="10"
+                       Margin="0,0,0,4"
+                       Visibility="Collapsed" />
+            <TextBlock x:Name="TranslationText"
+                       Text=""
+                       TextWrapping="Wrap"
+                       FontFamily="{StaticResource MonoFontFamily}"
+                       FontSize="12"
+                       LineHeight="18" />
+        </StackPanel>
+    </Border>
+</Window>

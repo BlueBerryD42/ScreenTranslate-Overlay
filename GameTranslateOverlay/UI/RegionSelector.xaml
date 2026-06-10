@@ -1,0 +1,17 @@
+﻿<Window x:Class="GameTranslateOverlay.UI.RegionSelector"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="#01000000"
+        Topmost="True"
+        ShowInTaskbar="False"
+        Cursor="Cross">
+    <Canvas x:Name="RootCanvas" Background="Transparent">
+        <Border x:Name="SelectionBox"
+                BorderBrush="#5B8EF0"
+                BorderThickness="2"
+                Background="#335B8EF0"
+                Visibility="Collapsed" />
+    </Canvas>
+</Window>
