@@ -2,7 +2,6 @@
 
 Lightweight WPF overlay for in-game text translation using Windows OCR and DeepL.
 
-> The executable and project folder are still named **GameTranslateOverlay** locally; this is the public name on GitHub.
 ## Borderless windowed required
 
 **Exclusive fullscreen games will not work** with screen capture. Run the game in **borderless windowed** or **windowed** mode so the desktop compositor can capture pixels.
