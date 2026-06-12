@@ -64,6 +64,7 @@ public partial class SettingsPanel : Window
         SelectLang(TargetLangCombo, s.TargetLang);
         TranslateHotkeyBox.Text = s.Hotkeys.Translate;
         PickRegionHotkeyBox.Text = s.Hotkeys.PickRegion;
+        DismissHotkeyBox.Text = s.Hotkeys.Dismiss;
         SetTextColor(s.Overlay.TextColor);
         SetBackgroundColor(s.Overlay.BackgroundColor);
         OpacitySlider.Value = s.Overlay.BackgroundOpacity;
@@ -71,6 +72,7 @@ public partial class SettingsPanel : Window
         FontSizeSlider.Value = s.Overlay.FontSize;
         FontSizeLabel.Text = s.Overlay.FontSize.ToString("0");
         AutoHideBox.Text = s.Overlay.AutoHideSeconds.ToString();
+        RememberOverlayPositionBox.IsChecked = s.Overlay.RememberOverlayPosition;
         StartWithWindowsBox.IsChecked = s.StartWithWindows;
         LogPathText.Text = LogService.Instance.GetTodayLogPath();
         UpdateOcrStatus();
@@ -333,6 +335,12 @@ public partial class SettingsPanel : Window
             return;
         }
 
+        if (!HotkeyParser.TryParse(DismissHotkeyBox.Text.Trim(), out _, out var dismissError))
+        {
+            MessageBox.Show(this, dismissError, "Hotkeys", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         var startWithWindows = StartWithWindowsBox.IsChecked == true;
         var exePath = Environment.ProcessPath ?? AppContext.BaseDirectory;
 
@@ -343,11 +351,13 @@ public partial class SettingsPanel : Window
             s.TargetLang = GetSelectedLang(TargetLangCombo) ?? s.TargetLang;
             s.Hotkeys.Translate = TranslateHotkeyBox.Text.Trim();
             s.Hotkeys.PickRegion = PickRegionHotkeyBox.Text.Trim();
+            s.Hotkeys.Dismiss = DismissHotkeyBox.Text.Trim();
             s.Overlay.TextColor = _textColorHex;
             s.Overlay.BackgroundColor = _backgroundColorHex;
             s.Overlay.BackgroundOpacity = OpacitySlider.Value;
             s.Overlay.FontSize = FontSizeSlider.Value;
             s.Overlay.AutoHideSeconds = autoHide;
+            s.Overlay.RememberOverlayPosition = RememberOverlayPositionBox.IsChecked == true;
             s.StartWithWindows = startWithWindows;
         });
 

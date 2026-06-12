@@ -107,6 +107,9 @@ public partial class App : Application
                 case HotkeyManager.HotkeyTranslate:
                     _coordinator!.RunTranslateHotkey();
                     break;
+                case HotkeyManager.HotkeyDismiss:
+                    _coordinator!.DismissOverlay();
+                    break;
             }
         });
     }
@@ -137,7 +140,7 @@ public partial class App : Application
     private void RegisterHotkeysFromSettings()
     {
         var hotkeys = _settingsService!.Current.Hotkeys;
-        if (!_hotkeyManager!.Register(hotkeys.PickRegion, hotkeys.Translate, out var error))
+        if (!_hotkeyManager!.Register(hotkeys.PickRegion, hotkeys.Translate, hotkeys.Dismiss, out var error))
             _trayService!.ShowBalloon("GameTranslateOverlay", error);
     }
 

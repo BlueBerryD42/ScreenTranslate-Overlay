@@ -23,7 +23,15 @@ public sealed class TranslationCoordinator
     private readonly TrayService _trayService;
     private readonly RegionSelector _regionSelector;
 
+    private const int MaxConsecutiveEmptyOcr = 3;
+    private static readonly TimeSpan MinTranslateInterval = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan EmptyOcrBlockDuration = TimeSpan.FromSeconds(5);
+
     private bool _busy;
+    private bool _busyNotified;
+    private int _consecutiveEmptyOcr;
+    private DateTime _lastPipelineStartUtc = DateTime.MinValue;
+    private DateTime _blockedUntilUtc = DateTime.MinValue;
     private PendingRegionAction _pendingRegionAction;
 
     public TranslationCoordinator(
@@ -73,6 +81,13 @@ public sealed class TranslationCoordinator
 
     public void RunTranslateHotkey()
     {
+        if (!TryEnterTranslatePipeline(out var blockReason))
+        {
+            if (blockReason is not null)
+                _trayService.ShowBalloon("GameTranslateOverlay", blockReason);
+            return;
+        }
+
         var settings = _settingsService.Current;
         if (settings.UseFixedRegion && settings.CaptureRegion.IsValid)
         {
@@ -84,6 +99,15 @@ public sealed class TranslationCoordinator
         LogService.Instance.Info("RunTranslateHotkey: mode=quick (region select)");
         _pendingRegionAction = PendingRegionAction.QuickTranslate;
         _regionSelector.ShowSelector();
+    }
+
+    public void DismissOverlay()
+    {
+        if (_overlayWindow.IsVisible)
+        {
+            LogService.Instance.Info("Overlay dismissed via hotkey");
+            _overlayWindow.Dismiss();
+        }
     }
 
     private void OnRegionSelected(object? sender, Int32Rect region)
@@ -113,18 +137,54 @@ public sealed class TranslationCoordinator
                     $"Fixed capture region saved ({region.Width}x{region.Height}). Press F10 to translate this area.");
                 break;
             case PendingRegionAction.QuickTranslate:
+                if (!TryEnterTranslatePipeline(out var blockReason))
+                {
+                    if (blockReason is not null)
+                        _trayService.ShowBalloon("GameTranslateOverlay", blockReason);
+                    break;
+                }
+
                 _ = RunTranslatePipelineAsync(CaptureRegionSettings.FromRect(region));
                 break;
         }
     }
 
-    private async Task RunTranslatePipelineAsync(CaptureRegionSettings region)
+    private bool TryEnterTranslatePipeline(out string? blockReason)
     {
+        blockReason = null;
+        var now = DateTime.UtcNow;
+
+        if (now < _blockedUntilUtc)
+        {
+            var seconds = Math.Max(1, (int)Math.Ceiling((_blockedUntilUtc - now).TotalSeconds));
+            blockReason = $"Too many empty OCR attempts. Wait {seconds}s before retrying.";
+            LogService.Instance.Info($"Translate pipeline blocked: cooldown ({seconds}s remaining)");
+            return false;
+        }
+
         if (_busy)
         {
             LogService.Instance.Info("Translate pipeline skipped: busy");
-            return;
+            if (!_busyNotified)
+            {
+                _busyNotified = true;
+                blockReason = "Still translating…";
+            }
+
+            return false;
         }
+
+        if (now - _lastPipelineStartUtc < MinTranslateInterval)
+        {
+            LogService.Instance.Info("Translate pipeline skipped: rate limit");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task RunTranslatePipelineAsync(CaptureRegionSettings region)
+    {
 
         if (!region.IsValid)
         {
@@ -154,8 +214,10 @@ public sealed class TranslationCoordinator
         LogService.Instance.Info(
             $"Translate pipeline start: region x={region.X}, y={region.Y}, w={region.W}, h={region.H}");
         _busy = true;
+        _busyNotified = false;
+        _lastPipelineStartUtc = DateTime.UtcNow;
         _overlayWindow.ShowAtCaptureRegion(region);
-        _overlayWindow.BeginNewTranslation();
+        _overlayWindow.ShowLoadingState();
 
         string? capturePath = null;
         string? ocrImagePath = null;
@@ -180,10 +242,23 @@ public sealed class TranslationCoordinator
                     SaveDebugCapture(ocrImagePath, "last_capture_prep.png");
 
                 LogService.Instance.Warn("Translate pipeline: no text detected after OCR");
-                ShowOverlayMessage("No text detected in capture region.");
+                _consecutiveEmptyOcr++;
+                if (_consecutiveEmptyOcr >= MaxConsecutiveEmptyOcr)
+                {
+                    _consecutiveEmptyOcr = 0;
+                    _blockedUntilUtc = DateTime.UtcNow.Add(EmptyOcrBlockDuration);
+                    ShowOverlayMessage(
+                        $"No text detected. Wait {(int)EmptyOcrBlockDuration.TotalSeconds}s before retrying.");
+                }
+                else
+                {
+                    ShowOverlayMessage("No text detected in capture region.");
+                }
+
                 return;
             }
 
+            _consecutiveEmptyOcr = 0;
             _overlayWindow.SetContent(ocrText, null);
 
             var translated = await _translator.TranslateAsync(
@@ -215,6 +290,7 @@ public sealed class TranslationCoordinator
         {
             _overlayWindow.SetLoading(false);
             _busy = false;
+            _busyNotified = false;
             TryDeleteTempFile(capturePath);
             if (ocrImagePath is not null && ocrImagePath != capturePath)
                 TryDeleteTempFile(ocrImagePath);

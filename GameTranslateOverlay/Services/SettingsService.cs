@@ -145,6 +145,7 @@ public sealed class SettingsService
         {
             Translate = string.IsNullOrWhiteSpace(loaded.Translate) ? defaults.Translate : loaded.Translate,
             PickRegion = string.IsNullOrWhiteSpace(loaded.PickRegion) ? defaults.PickRegion : loaded.PickRegion,
+            Dismiss = string.IsNullOrWhiteSpace(loaded.Dismiss) ? defaults.Dismiss : loaded.Dismiss,
         };
     }
 
@@ -160,6 +161,7 @@ public sealed class SettingsService
             BackgroundOpacity = loaded.BackgroundOpacity <= 0 ? defaults.BackgroundOpacity : Math.Min(loaded.BackgroundOpacity, 1),
             FontSize = ClampFontSize(loaded.FontSize),
             AutoHideSeconds = loaded.AutoHideSeconds < 0 ? defaults.AutoHideSeconds : loaded.AutoHideSeconds,
+            RememberOverlayPosition = loaded.RememberOverlayPosition,
         };
     }
 

@@ -18,6 +18,7 @@ public sealed class HotkeySettings
 {
     public string Translate { get; set; } = "F10";
     public string PickRegion { get; set; } = "F9";
+    public string Dismiss { get; set; } = "Escape";
 }
 
 public sealed class CaptureRegionSettings
@@ -40,5 +41,6 @@ public sealed class OverlaySettings
     public double BackgroundOpacity { get; set; } = 0.92;
     public double FontSize { get; set; } = 12;
     public int AutoHideSeconds { get; set; } = 15;
+    public bool RememberOverlayPosition { get; set; }
 }
 

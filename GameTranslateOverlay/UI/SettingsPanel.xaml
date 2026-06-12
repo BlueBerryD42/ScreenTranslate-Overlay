@@ -58,11 +58,15 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Translate" Style="{StaticResource FieldLabelStyle}" />
                         <TextBox Grid.Row="1" Grid.Column="0" x:Name="TranslateHotkeyBox" Margin="0,0,0,0" />
                         <TextBlock Grid.Row="0" Grid.Column="2" Text="Pick region" Style="{StaticResource FieldLabelStyle}" />
                         <TextBox Grid.Row="1" Grid.Column="2" x:Name="PickRegionHotkeyBox" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Text="Dismiss overlay" Style="{StaticResource FieldLabelStyle}" Margin="0,4,0,0" />
+                        <TextBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" x:Name="DismissHotkeyBox" />
                     </Grid>
                     <TextBlock Text="Overlay" Style="{StaticResource SectionHeaderStyle}" />
                     <TextBlock Text="Text color" Style="{StaticResource FieldLabelStyle}" />
@@ -92,7 +96,10 @@
                     </DockPanel>
 
                     <TextBlock Text="Auto-hide (seconds, 0 = off)" Style="{StaticResource FieldLabelStyle}" />
-                    <TextBox x:Name="AutoHideBox" Margin="0,0,0,6" />
+                    <TextBox x:Name="AutoHideBox" Margin="0,0,0,4" />
+                    <CheckBox x:Name="RememberOverlayPositionBox"
+                              Content="Remember overlay position after drag"
+                              Margin="0,0,0,6" />
 
                     <TextBlock Text="General" Style="{StaticResource SectionHeaderStyle}" />
                     <TextBlock Text="Log file" Style="{StaticResource FieldLabelStyle}" />

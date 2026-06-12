@@ -9,6 +9,7 @@ public sealed class HotkeyManager : IDisposable
 {
     public const int HotkeyPickRegion = 1;
     public const int HotkeyTranslate = 2;
+    public const int HotkeyDismiss = 3;
 
     private const int WmHotkey = 0x0312;
 
@@ -25,7 +26,7 @@ public sealed class HotkeyManager : IDisposable
         _source.AddHook(WndProc);
     }
 
-    public bool Register(string pickRegionHotkey, string translateHotkey, out string error)
+    public bool Register(string pickRegionHotkey, string translateHotkey, string dismissHotkey, out string error)
     {
         UnregisterAll();
         error = string.Empty;
@@ -40,6 +41,13 @@ public sealed class HotkeyManager : IDisposable
         if (!HotkeyParser.TryParse(translateHotkey, out var translate, out var translateError))
         {
             error = $"Translate hotkey: {translateError}";
+            LogService.Instance.Warn($"Hotkey register failed: {error}");
+            return false;
+        }
+
+        if (!HotkeyParser.TryParse(dismissHotkey, out var dismiss, out var dismissError))
+        {
+            error = $"Dismiss hotkey: {dismissError}";
             LogService.Instance.Warn($"Hotkey register failed: {error}");
             return false;
         }
@@ -59,8 +67,17 @@ public sealed class HotkeyManager : IDisposable
             return false;
         }
 
+        if (!RegisterHotKey(_hwnd, HotkeyDismiss, dismiss.Modifiers, dismiss.VirtualKey))
+        {
+            UnregisterHotKey(_hwnd, HotkeyPickRegion);
+            UnregisterHotKey(_hwnd, HotkeyTranslate);
+            error = "Failed to register dismiss hotkey (may be in use).";
+            LogService.Instance.Warn($"Hotkey register failed: {error}");
+            return false;
+        }
+
         LogService.Instance.Info(
-            $"Hotkeys registered: pick=\"{pickRegionHotkey}\", translate=\"{translateHotkey}\"");
+            $"Hotkeys registered: pick=\"{pickRegionHotkey}\", translate=\"{translateHotkey}\", dismiss=\"{dismissHotkey}\"");
         return true;
     }
 
@@ -79,6 +96,7 @@ public sealed class HotkeyManager : IDisposable
     {
         UnregisterHotKey(_hwnd, HotkeyPickRegion);
         UnregisterHotKey(_hwnd, HotkeyTranslate);
+        UnregisterHotKey(_hwnd, HotkeyDismiss);
     }
 
     public void Dispose()
@@ -97,4 +115,3 @@ public sealed class HotkeyManager : IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }
-

@@ -46,6 +46,9 @@ dotnet run --project GameTranslateOverlay/GameTranslateOverlay.csproj
 |---------|--------|
 | F9 | Pick capture region (saved to config) |
 | F10 | Translate saved region |
+| Escape | Dismiss overlay |
+
+Enable **Remember overlay position after drag** in Settings to keep the HUD where you moved it between F10 presses.
 
 
 ## Logs

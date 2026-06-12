@@ -15,6 +15,8 @@ public partial class OverlayWindow : Window
     private CaptureRegionSettings? _anchorRegion;
     private bool _autoHidePaused;
     private bool _pendingTopmostRefresh;
+    private bool _rememberOverlayPosition;
+    private bool _userHasCustomPosition;
 
     public OverlayWindow()
     {
@@ -40,6 +42,8 @@ public partial class OverlayWindow : Window
                 c.R, c.G, c.B));
         }
 
+        _rememberOverlayPosition = overlay.RememberOverlayPosition;
+
         if (overlay.AutoHideSeconds > 0)
             _autoHideTimer.Interval = TimeSpan.FromSeconds(overlay.AutoHideSeconds);
         else
@@ -55,15 +59,24 @@ public partial class OverlayWindow : Window
 
     public void ShowAtCaptureRegion(CaptureRegionSettings region)
     {
+        if (_anchorRegion is null ||
+            _anchorRegion.X != region.X ||
+            _anchorRegion.Y != region.Y ||
+            _anchorRegion.W != region.W ||
+            _anchorRegion.H != region.H)
+        {
+            _userHasCustomPosition = false;
+        }
+
         _anchorRegion = region;
     }
 
-    public void BeginNewTranslation()
+    public void ShowLoadingState()
     {
         _autoHideTimer.Stop();
-        SetContent(null, null);
+        SetContent(null, "Translating...");
         SetLoading(true);
-        Hide();
+        PresentOverlay(reposition: ShouldRepositionToAnchor());
     }
 
     public void SetLoading(bool loading)
@@ -92,18 +105,27 @@ public partial class OverlayWindow : Window
 
     public void ShowOverlay()
     {
+        SetLoading(false);
+        PresentOverlay(reposition: ShouldRepositionToAnchor());
+        RestartAutoHideTimer();
+    }
+
+    private bool ShouldRepositionToAnchor() =>
+        !_rememberOverlayPosition || !_userHasCustomPosition;
+
+    private void PresentOverlay(bool reposition)
+    {
         var firstShow = !IsVisible;
         if (firstShow)
             Show();
 
         UpdateLayout();
-        RepositionToAnchor();
+        if (reposition)
+            RepositionToAnchor();
 
         EnsureOnTop();
         if (firstShow)
             _pendingTopmostRefresh = true;
-
-        RestartAutoHideTimer();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -225,6 +247,8 @@ public partial class OverlayWindow : Window
         try
         {
             DragMove();
+            if (_rememberOverlayPosition)
+                _userHasCustomPosition = true;
         }
         catch
         {
