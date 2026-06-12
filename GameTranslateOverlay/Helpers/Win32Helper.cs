@@ -7,12 +7,10 @@ namespace GameTranslateOverlay.Helpers;
 public static class Win32Helper
 {
     private const int GwlExStyle = -20;
-    private const int WsExTransparent = 0x00000020;
     private const int WsExLayered = 0x00080000;
     private const int WsExToolWindow = 0x00000080;
 
     private static readonly IntPtr HwndTopmost = new(-1);
-    private static readonly IntPtr HwndNotTopmost = new(-2);
     private const uint SwpNomove = 0x0002;
     private const uint SwpNosize = 0x0001;
     private const uint SwpNoactivate = 0x0010;
@@ -51,21 +49,15 @@ public static class Win32Helper
         int cy,
         uint uFlags);
 
-    public static void ApplyOverlayStyles(Window window, bool pinOverlay)
+    public static void ApplyOverlayStyles(Window window)
     {
         var helper = new WindowInteropHelper(window);
         var hwnd = helper.EnsureHandle();
 
         var exStyle = GetWindowLongPtr(hwnd, GwlExStyle).ToInt32();
         exStyle |= WsExLayered | WsExToolWindow;
-        if (pinOverlay)
-            exStyle &= ~WsExTransparent;
-        else
-            exStyle |= WsExTransparent;
-
         SetWindowLongPtrValue(hwnd, GwlExStyle, new IntPtr(exStyle));
 
-        var insertAfter = pinOverlay ? HwndTopmost : HwndNotTopmost;
-        SetWindowPos(hwnd, insertAfter, 0, 0, 0, 0, SwpNomove | SwpNosize | SwpNoactivate | SwpShowwindow);
+        SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNomove | SwpNosize | SwpNoactivate | SwpShowwindow);
     }
 }

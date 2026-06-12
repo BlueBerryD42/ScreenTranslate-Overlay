@@ -105,8 +105,8 @@ public sealed class TranslationCoordinator
                     s.UseFixedRegion = true;
                 });
                 _trayService.SyncMenuState(
-                    _settingsService.Current.PinOverlay,
-                    _settingsService.Current.StartWithWindows,
+                    _settingsService.Current.SourceLang,
+                    _settingsService.Current.TargetLang,
                     _settingsService.Current.UseFixedRegion);
                 _trayService.ShowBalloon(
                     "GameTranslateOverlay",
@@ -155,7 +155,7 @@ public sealed class TranslationCoordinator
             $"Translate pipeline start: region x={region.X}, y={region.Y}, w={region.W}, h={region.H}");
         _busy = true;
         _overlayWindow.ShowAtCaptureRegion(region);
-        _overlayWindow.SetLoading(true);
+        _overlayWindow.BeginNewTranslation();
 
         string? capturePath = null;
         string? ocrImagePath = null;
@@ -179,7 +179,8 @@ public sealed class TranslationCoordinator
                 if (ocrImagePath is not null && ocrImagePath != capturePath)
                     SaveDebugCapture(ocrImagePath, "last_capture_prep.png");
 
-                _overlayWindow.SetContent(string.Empty, "(No text detected)");
+                LogService.Instance.Warn("Translate pipeline: no text detected after OCR");
+                ShowOverlayMessage("No text detected in capture region.");
                 return;
             }
 
@@ -203,14 +204,12 @@ public sealed class TranslationCoordinator
             _trayService.ShowBalloon(
                 "DeepL quota",
                 "DeepL quota exhausted. Upgrade your plan or wait for the next billing period.");
-            _overlayWindow.SetContent(null, "DeepL quota exhausted.");
-            _overlayWindow.ShowOverlay();
+            ShowOverlayMessage("DeepL quota exhausted.", notifyTray: false);
         }
         catch (Exception ex)
         {
             LogService.Instance.Error("Translate pipeline failed", ex);
-            _overlayWindow.SetContent(null, $"Error: {ex.Message}");
-            _overlayWindow.ShowOverlay();
+            ShowOverlayMessage($"Error: {ex.Message}");
         }
         finally
         {
@@ -258,6 +257,14 @@ public sealed class TranslationCoordinator
     private void UpdateTrayQuotaDisplay(DeepLUsageInfo usage)
     {
         _trayService.UpdateQuotaDisplay(DeepLUsageService.FormatSummary(usage));
+    }
+
+    private void ShowOverlayMessage(string message, bool notifyTray = true)
+    {
+        _overlayWindow.SetContent(null, message);
+        _overlayWindow.ShowOverlay();
+        if (notifyTray)
+            _trayService.ShowBalloon("GameTranslateOverlay", message);
     }
 
     private static void SaveDebugCapture(string sourcePath, string fileName)

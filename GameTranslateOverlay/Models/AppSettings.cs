@@ -11,7 +11,6 @@ public sealed class AppSettings
     public CaptureRegionSettings CaptureRegion { get; set; } = new();
     public OverlaySettings Overlay { get; set; } = new();
     public bool StartWithWindows { get; set; }
-    public bool PinOverlay { get; set; } = true;
     public bool UseFixedRegion { get; set; }
 }
 

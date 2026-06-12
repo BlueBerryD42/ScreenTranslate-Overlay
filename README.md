@@ -19,8 +19,8 @@ Examples:
 
 - Save capture region (default F9) — no translation until you press translate
 - Translate saved region (default F10): capture → OCR → DeepL → HUD overlay
-- Pin/drag overlay, copy translation, auto-hide timer
-- System tray: pin overlay, set region, start with Windows, settings
+- Drag overlay, copy translation, auto-hide timer with Keep
+- System tray: quick source/target language, set region, settings (incl. start with Windows)
 - Safe settings load (`config.json`) with corrupt-file backup and defaults merge
 
 ## Requirements

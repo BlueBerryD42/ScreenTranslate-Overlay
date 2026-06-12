@@ -23,7 +23,6 @@
                                   FontSize="10"
                                   ToolTip="Keep visible — pauses auto-hide until turned off or app restarts"
                                   Click="OnKeepClick" />
-                    <ToggleButton x:Name="PinButton" Content="Pin" Style="{StaticResource SecondaryToggleButtonStyle}" Padding="6,2" Margin="0,0,4,0" FontSize="10" Click="OnPinClick" />
                     <Button x:Name="CloseButton"
                             Content="×"
                             Style="{StaticResource SecondaryButtonStyle}"
@@ -34,12 +33,14 @@
                             ToolTip="Close"
                             Click="OnCloseClick" />
                 </StackPanel>
-                <Border DockPanel.Dock="Left"
+                <Border x:Name="DragHandle"
+                        DockPanel.Dock="Left"
                         Height="18"
                         MinWidth="28"
                         Margin="0,0,8,0"
                         Background="Transparent"
                         Cursor="SizeAll"
+                        ToolTip="Drag to move"
                         MouseLeftButtonDown="OnDragHandleDown">
                     <TextBlock Text="&#x22EE;&#x22EE;"
                                FontSize="10"

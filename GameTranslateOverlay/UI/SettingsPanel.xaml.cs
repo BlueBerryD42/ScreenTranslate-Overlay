@@ -12,31 +12,6 @@ namespace GameTranslateOverlay.UI;
 
 public partial class SettingsPanel : Window
 {
-    private static readonly (string Code, string Label)[] SourceLanguages =
-    {
-        ("JA", "Japanese (JA)"),
-        ("EN", "English (EN)"),
-        ("DE", "German (DE)"),
-        ("FR", "French (FR)"),
-        ("ES", "Spanish (ES)"),
-        ("ZH-HANS", "Chinese Simplified"),
-        ("ZH-HANT", "Chinese Traditional"),
-        ("KO", "Korean (KO)"),
-    };
-
-    private static readonly (string Code, string Label)[] TargetLanguages =
-    {
-        ("EN-US", "English (US)"),
-        ("EN-GB", "English (UK)"),
-        ("DE", "German (DE)"),
-        ("FR", "French (FR)"),
-        ("ES", "Spanish (ES)"),
-        ("ZH-HANS", "Chinese Simplified"),
-        ("ZH-HANT", "Chinese Traditional"),
-        ("VI", "Vietnamese (VI)"),
-        ("KO", "Korean (KO)"),
-    };
-
     private static readonly SolidColorBrush OcrReadyBrush = new(System.Windows.Media.Color.FromRgb(0x16, 0xA3, 0x4A));
     private static readonly SolidColorBrush OcrMissingBrush = new(System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26));
     private static readonly SolidColorBrush QuotaOkBrush = new(System.Windows.Media.Color.FromRgb(0x16, 0xA3, 0x4A));
@@ -74,11 +49,11 @@ public partial class SettingsPanel : Window
 
     private void PopulateLanguageCombos()
     {
-        foreach (var (code, label) in SourceLanguages)
-            SourceLangCombo.Items.Add(new LangItem(code, label));
+        foreach (var lang in LanguageCatalog.SourceLanguages)
+            SourceLangCombo.Items.Add(new LangItem(lang.Code, lang.Label));
 
-        foreach (var (code, label) in TargetLanguages)
-            TargetLangCombo.Items.Add(new LangItem(code, label));
+        foreach (var lang in LanguageCatalog.TargetLanguages)
+            TargetLangCombo.Items.Add(new LangItem(lang.Code, lang.Label));
     }
 
     private void LoadFromSettings()

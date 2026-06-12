@@ -107,7 +107,6 @@ public sealed class SettingsService
             CaptureRegion = loaded.CaptureRegion ?? defaults.CaptureRegion,
             Overlay = MergeOverlay(loaded.Overlay, defaults.Overlay),
             StartWithWindows = loaded.StartWithWindows,
-            PinOverlay = loaded.PinOverlay,
             UseFixedRegion = loaded.UseFixedRegion,
         };
     }

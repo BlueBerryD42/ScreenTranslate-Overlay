@@ -52,13 +52,6 @@ public partial class App : Application
 
         _coordinator.ApplySettingsToUi();
 
-        _overlayWindow.SetPinToggleHandler(pinned =>
-        {
-            _settingsService!.Update(s => s.PinOverlay = pinned);
-            _coordinator!.ApplySettingsToUi();
-            SyncTrayMenuState();
-        });
-
         _hotkeyHost = new HotkeyHostWindow();
         _hotkeyHost.Show();
         var hwnd = new WindowInteropHelper(_hotkeyHost).Handle;
@@ -67,13 +60,13 @@ public partial class App : Application
         RegisterHotkeysFromSettings();
 
         _trayService.Initialize(
-            pinOverlay: _settingsService.Current.PinOverlay,
-            startWithWindows: _settingsService.Current.StartWithWindows,
+            sourceLang: _settingsService.Current.SourceLang,
+            targetLang: _settingsService.Current.TargetLang,
             useFixedRegion: _settingsService.Current.UseFixedRegion,
-            togglePinOverlay: TogglePinOverlay,
+            setSourceLang: SetSourceLang,
+            setTargetLang: SetTargetLang,
             setCaptureRegion: () => _coordinator!.BeginPickFixedRegion(),
             toggleUseFixedRegion: ToggleUseFixedRegion,
-            toggleStartWithWindows: ToggleStartWithWindows,
             openSettings: OpenSettings,
             exit: Shutdown);
 
@@ -148,31 +141,40 @@ public partial class App : Application
             _trayService!.ShowBalloon("GameTranslateOverlay", error);
     }
 
-    private void TogglePinOverlay()
-    {
-        _settingsService!.Update(s => s.PinOverlay = !s.PinOverlay);
-        _coordinator!.ApplySettingsToUi();
-        SyncTrayMenuState();
-    }
-
     private void ToggleUseFixedRegion()
     {
         _settingsService!.Update(s => s.UseFixedRegion = !s.UseFixedRegion);
         SyncTrayMenuState();
     }
 
-    private void ToggleStartWithWindows()
+    private void SetSourceLang(string code)
     {
-        _settingsService!.Update(s => s.StartWithWindows = !s.StartWithWindows);
-        SyncStartupRegistry();
+        if (code.Equals(_settingsService!.Current.SourceLang, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _settingsService.Update(s => s.SourceLang = code);
         SyncTrayMenuState();
+        LogService.Instance.Info($"Source language changed from tray: {code}");
+
+        if (!OcrEngine.IsLanguageAvailable(code))
+            _trayService!.ShowBalloon("GameTranslateOverlay", OcrEngine.GetAvailabilityMessage(code));
+    }
+
+    private void SetTargetLang(string code)
+    {
+        if (code.Equals(_settingsService!.Current.TargetLang, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _settingsService.Update(s => s.TargetLang = code);
+        SyncTrayMenuState();
+        LogService.Instance.Info($"Target language changed from tray: {code}");
     }
 
     private void SyncTrayMenuState()
     {
         _trayService!.SyncMenuState(
-            _settingsService!.Current.PinOverlay,
-            _settingsService.Current.StartWithWindows,
+            _settingsService!.Current.SourceLang,
+            _settingsService.Current.TargetLang,
             _settingsService.Current.UseFixedRegion);
     }
 

@@ -12,19 +12,18 @@ public partial class OverlayWindow : Window
 {
     private readonly DispatcherTimer _autoHideTimer;
     private string _lastTranslation = string.Empty;
-    private Action<bool>? _onPinToggled;
     private CaptureRegionSettings? _anchorRegion;
     private bool _autoHidePaused;
+    private bool _pendingTopmostRefresh;
 
     public OverlayWindow()
     {
         InitializeComponent();
         _autoHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _autoHideTimer.Tick += OnAutoHideTick;
+        SourceInitialized += OnSourceInitialized;
         Hide();
     }
-
-    public void SetPinToggleHandler(Action<bool> onPinToggled) => _onPinToggled = onPinToggled;
 
     public void ApplySettings(AppSettings settings)
     {
@@ -41,19 +40,30 @@ public partial class OverlayWindow : Window
                 c.R, c.G, c.B));
         }
 
-        // PinOverlay defaults true so Copy/Pin work; unpinned = click-through to the game (Win32 WS_EX_TRANSPARENT).
-        PinButton.IsChecked = settings.PinOverlay;
-        Win32Helper.ApplyOverlayStyles(this, settings.PinOverlay);
-
         if (overlay.AutoHideSeconds > 0)
             _autoHideTimer.Interval = TimeSpan.FromSeconds(overlay.AutoHideSeconds);
         else
             _autoHideTimer.Interval = TimeSpan.Zero;
+
+        if (IsVisible)
+        {
+            EnsureOnTop();
+            if (!_autoHidePaused)
+                RestartAutoHideTimer();
+        }
     }
 
     public void ShowAtCaptureRegion(CaptureRegionSettings region)
     {
         _anchorRegion = region;
+    }
+
+    public void BeginNewTranslation()
+    {
+        _autoHideTimer.Stop();
+        SetContent(null, null);
+        SetLoading(true);
+        Hide();
     }
 
     public void SetLoading(bool loading)
@@ -82,14 +92,40 @@ public partial class OverlayWindow : Window
 
     public void ShowOverlay()
     {
-        if (!IsVisible)
+        var firstShow = !IsVisible;
+        if (firstShow)
             Show();
 
         UpdateLayout();
         RepositionToAnchor();
 
-        Topmost = true;
+        EnsureOnTop();
+        if (firstShow)
+            _pendingTopmostRefresh = true;
+
         RestartAutoHideTimer();
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        if (IsVisible)
+            EnsureOnTop();
+    }
+
+    private void EnsureOnTop()
+    {
+        Topmost = true;
+        Win32Helper.ApplyOverlayStyles(this);
+    }
+
+    protected override void OnContentRendered(EventArgs e)
+    {
+        base.OnContentRendered(e);
+        if (!_pendingTopmostRefresh)
+            return;
+
+        _pendingTopmostRefresh = false;
+        EnsureOnTop();
     }
 
     private void RepositionToAnchor()
@@ -158,6 +194,9 @@ public partial class OverlayWindow : Window
 
     private void OnAutoHideTick(object? sender, EventArgs e)
     {
+        if (_autoHidePaused)
+            return;
+
         Dismiss();
     }
 
@@ -178,18 +217,9 @@ public partial class OverlayWindow : Window
             Clipboard.SetText(_lastTranslation);
     }
 
-    private void OnPinClick(object sender, RoutedEventArgs e)
-    {
-        var pinned = PinButton.IsChecked == true;
-        _onPinToggled?.Invoke(pinned);
-        Win32Helper.ApplyOverlayStyles(this, pinned);
-    }
-
     private void OnDragHandleDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left)
-            return;
-        if (PinButton.IsChecked != true)
             return;
 
         try

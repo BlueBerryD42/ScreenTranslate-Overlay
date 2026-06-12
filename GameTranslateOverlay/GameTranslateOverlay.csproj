@@ -10,8 +10,7 @@
     <RootNamespace>GameTranslateOverlay</RootNamespace>
     <AssemblyName>GameTranslateOverlay</AssemblyName>
     <ApplicationIcon>Assets\translating.ico</ApplicationIcon>
-    
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
 </PropertyGroup>
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
@@ -23,6 +22,9 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\translating16x16.ico" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DeepL.net" Version="1.21.0" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
