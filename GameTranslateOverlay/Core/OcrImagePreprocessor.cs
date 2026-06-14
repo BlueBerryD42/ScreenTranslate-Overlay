@@ -131,11 +131,37 @@ public static class OcrImagePreprocessor
 
     private static (byte Min, byte Max) GetContrastRange(byte[] luminance)
     {
-        var sorted = luminance.OrderBy(v => v).ToArray();
-        var lowIndex = (int)Math.Floor(sorted.Length * 0.02);
-        var highIndex = (int)Math.Ceiling(sorted.Length * 0.98) - 1;
-        lowIndex = Math.Clamp(lowIndex, 0, sorted.Length - 1);
-        highIndex = Math.Clamp(highIndex, 0, sorted.Length - 1);
-        return (sorted[lowIndex], sorted[highIndex]);
+        var histogram = new int[256];
+        foreach (var value in luminance)
+            histogram[value]++;
+
+        var lowTarget = (int)Math.Floor(luminance.Length * 0.02);
+        var highTarget = (int)Math.Ceiling(luminance.Length * 0.98) - 1;
+
+        byte min = 0;
+        var cumulative = 0;
+        for (var i = 0; i < histogram.Length; i++)
+        {
+            cumulative += histogram[i];
+            if (cumulative > lowTarget)
+            {
+                min = (byte)i;
+                break;
+            }
+        }
+
+        byte max = 255;
+        cumulative = 0;
+        for (var i = histogram.Length - 1; i >= 0; i--)
+        {
+            cumulative += histogram[i];
+            if (cumulative > luminance.Length - 1 - highTarget)
+            {
+                max = (byte)i;
+                break;
+            }
+        }
+
+        return (min, max);
     }
 }

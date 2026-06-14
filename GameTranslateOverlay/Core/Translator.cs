@@ -4,8 +4,18 @@ using GameTranslateOverlay.Services;
 
 namespace GameTranslateOverlay.Core;
 
-public sealed class Translator
+public sealed class Translator : IDisposable
 {
+    private string? _clientApiKey;
+    private DeepL.Translator? _client;
+
+    public void InvalidateClient()
+    {
+        _client?.Dispose();
+        _client = null;
+        _clientApiKey = null;
+    }
+
     public async Task<DeepLUsageInfo> GetUsageAsync(
         string apiKey,
         CancellationToken cancellationToken = default)
@@ -17,7 +27,7 @@ public sealed class Translator
 
         try
         {
-            var client = new DeepL.Translator(apiKey);
+            var client = GetClient(apiKey);
             var usage = await client.GetUsageAsync(cancellationToken).ConfigureAwait(false);
             var detail = usage.Character;
             if (detail is null)
@@ -60,7 +70,7 @@ public sealed class Translator
 
         try
         {
-            var client = new DeepL.Translator(apiKey);
+            var client = GetClient(apiKey);
             var result = await client.TranslateTextAsync(
                 text,
                 deeplSource,
@@ -76,4 +86,17 @@ public sealed class Translator
             throw;
         }
     }
+
+    private DeepL.Translator GetClient(string apiKey)
+    {
+        if (_client is not null && string.Equals(_clientApiKey, apiKey, StringComparison.Ordinal))
+            return _client;
+
+        _client?.Dispose();
+        _clientApiKey = apiKey;
+        _client = new DeepL.Translator(apiKey);
+        return _client;
+    }
+
+    public void Dispose() => InvalidateClient();
 }

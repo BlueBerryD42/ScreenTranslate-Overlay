@@ -24,7 +24,10 @@ public sealed class DeepLUsageService
             return null;
 
         if (!forceRefresh && _cached is not null && DateTime.UtcNow - _cachedAt < TimeSpan.FromMinutes(1))
+        {
+            LogService.Instance.Info("DeepL usage served from cache");
             return _cached;
+        }
 
         try
         {

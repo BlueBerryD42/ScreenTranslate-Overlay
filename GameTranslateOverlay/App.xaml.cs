@@ -16,6 +16,8 @@ public partial class App : Application
     private TranslationCoordinator? _coordinator;
     private DeepLUsageService? _usageService;
     private Translator? _translator;
+    private TranslationCache? _translationCache;
+    private string? _settingsLangKeySnapshot;
     private OverlayWindow? _overlayWindow;
     private RegionSelector? _regionSelector;
     private HotkeyHostWindow? _hotkeyHost;
@@ -35,6 +37,7 @@ public partial class App : Application
 
         var ocrEngine = new OcrEngine();
         _translator = new Translator();
+        _translationCache = new TranslationCache();
         _usageService = new DeepLUsageService(_translator);
 
         _overlayWindow = new OverlayWindow();
@@ -46,6 +49,7 @@ public partial class App : Application
             ocrEngine,
             _translator,
             _usageService,
+            _translationCache,
             _overlayWindow,
             _trayService,
             _regionSelector);
@@ -69,6 +73,10 @@ public partial class App : Application
             toggleUseFixedRegion: ToggleUseFixedRegion,
             openSettings: OpenSettings,
             exit: Shutdown);
+
+        _trayService.ConfigureRecentTranslations(
+            getRecentTranslations: () => _coordinator!.GetRecentTranslations(),
+            onRecentTranslationSelected: entry => _coordinator!.ShowRecentTranslation(entry));
 
         if (string.IsNullOrWhiteSpace(_settingsService.Current.DeeplApiKey))
         {
@@ -116,6 +124,7 @@ public partial class App : Application
 
     private void OpenSettings()
     {
+        _settingsLangKeySnapshot = BuildLangKeySnapshot();
         var panel = new SettingsPanel(
             _settingsService!,
             _startupService!,
@@ -130,6 +139,8 @@ public partial class App : Application
         LogService.Instance.Info("Settings saved (from Settings panel)");
         _usageService?.InvalidateCache();
         _usageService?.ResetWarnings();
+        if (!string.Equals(_settingsLangKeySnapshot, BuildLangKeySnapshot(), StringComparison.Ordinal))
+            _coordinator!.InvalidateTranslationCaches();
         _coordinator!.ApplySettingsToUi();
         SyncStartupRegistry();
         RegisterHotkeysFromSettings();
@@ -156,6 +167,7 @@ public partial class App : Application
             return;
 
         _settingsService.Update(s => s.SourceLang = code);
+        _coordinator!.InvalidateTranslationCaches();
         SyncTrayMenuState();
         LogService.Instance.Info($"Source language changed from tray: {code}");
 
@@ -169,6 +181,7 @@ public partial class App : Application
             return;
 
         _settingsService.Update(s => s.TargetLang = code);
+        _coordinator!.InvalidateTranslationCaches();
         SyncTrayMenuState();
         LogService.Instance.Info($"Target language changed from tray: {code}");
     }
@@ -179,6 +192,12 @@ public partial class App : Application
             _settingsService!.Current.SourceLang,
             _settingsService.Current.TargetLang,
             _settingsService.Current.UseFixedRegion);
+    }
+
+    private string BuildLangKeySnapshot()
+    {
+        var s = _settingsService!.Current;
+        return $"{s.SourceLang}|{s.TargetLang}|{s.DeeplApiKey}";
     }
 
     private void SyncStartupRegistry()

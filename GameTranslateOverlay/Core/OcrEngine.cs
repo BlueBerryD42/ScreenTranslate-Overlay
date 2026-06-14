@@ -9,6 +9,9 @@ namespace GameTranslateOverlay.Core;
 
 public sealed class OcrEngine
 {
+    private string? _cachedSourceLang;
+    private WinOcrEngine? _cachedEngine;
+
     public static string MapSourceLangToWindowsTag(string sourceLang) =>
         sourceLang.ToUpperInvariant() switch
         {
@@ -57,20 +60,19 @@ public sealed class OcrEngine
             "Windows Settings → Time & language → Language & region → your language → Language options → Language features.";
     }
 
+    public void InvalidateEngine()
+    {
+        _cachedEngine = null;
+        _cachedSourceLang = null;
+    }
+
     public async Task<string> RecognizeAsync(string imagePath, string sourceLang, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         LogService.Instance.Info($"RecognizeAsync start: lang={sourceLang}, image={imagePath}");
 
-        var tag = MapSourceLangToWindowsTag(sourceLang);
-        var language = new Language(tag);
-        var engine = WinOcrEngine.TryCreateFromLanguage(language);
-        if (engine is null)
-        {
-            LogService.Instance.Warn($"OCR language unavailable: {sourceLang} (tag={tag})");
-            throw new InvalidOperationException(GetAvailabilityMessage(sourceLang));
-        }
+        var engine = GetEngine(sourceLang);
 
         using var fileStream = File.OpenRead(imagePath);
         using var randomAccessStream = fileStream.AsRandomAccessStream();
@@ -104,5 +106,27 @@ public sealed class OcrEngine
         }
 
         return text;
+    }
+
+    private WinOcrEngine GetEngine(string sourceLang)
+    {
+        if (_cachedEngine is not null &&
+            string.Equals(_cachedSourceLang, sourceLang, StringComparison.OrdinalIgnoreCase))
+        {
+            return _cachedEngine;
+        }
+
+        var tag = MapSourceLangToWindowsTag(sourceLang);
+        var language = new Language(tag);
+        var engine = WinOcrEngine.TryCreateFromLanguage(language);
+        if (engine is null)
+        {
+            LogService.Instance.Warn($"OCR language unavailable: {sourceLang} (tag={tag})");
+            throw new InvalidOperationException(GetAvailabilityMessage(sourceLang));
+        }
+
+        _cachedSourceLang = sourceLang;
+        _cachedEngine = engine;
+        return engine;
     }
 }

@@ -1,5 +1,4 @@
-﻿using System.IO;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using GameTranslateOverlay.Models;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -12,7 +11,10 @@ public sealed class TrayService : IDisposable
     private readonly Dictionary<string, MenuItem> _sourceLangItems = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, MenuItem> _targetLangItems = new(StringComparer.OrdinalIgnoreCase);
     private MenuItem? _quotaMenuItem;
+    private MenuItem? _recentRoot;
     private MenuItem? _useFixedRegionItem;
+    private Func<IReadOnlyList<TranslationHistoryEntry>>? _getRecentTranslations;
+    private Action<TranslationHistoryEntry>? _onRecentTranslationSelected;
     private string _sourceLang = "JA";
     private string _targetLang = "EN-US";
     private string _quotaSummary = "—";
@@ -49,6 +51,9 @@ public sealed class TrayService : IDisposable
         menu.Items.Add(CreateItem("Set Capture Region", setCaptureRegion));
         menu.Items.Add(BuildLanguageSubmenu("Source language", LanguageCatalog.SourceLanguages, sourceLang, setSourceLang, _sourceLangItems));
         menu.Items.Add(BuildLanguageSubmenu("Target language", LanguageCatalog.TargetLanguages, targetLang, setTargetLang, _targetLangItems));
+        _recentRoot = new MenuItem { Header = "Recent translations" };
+        menu.Items.Add(_recentRoot);
+        menu.Opened += OnContextMenuOpened;
         menu.Items.Add(new Separator());
         _quotaMenuItem = new MenuItem { Header = "DeepL quota: —", IsEnabled = false };
         menu.Items.Add(_quotaMenuItem);
@@ -83,9 +88,53 @@ public sealed class TrayService : IDisposable
         UpdateTooltip();
     }
 
+    public void ConfigureRecentTranslations(
+        Func<IReadOnlyList<TranslationHistoryEntry>> getRecentTranslations,
+        Action<TranslationHistoryEntry> onRecentTranslationSelected)
+    {
+        _getRecentTranslations = getRecentTranslations;
+        _onRecentTranslationSelected = onRecentTranslationSelected;
+    }
+
     public void ShowBalloon(string title, string message)
     {
         _icon.ShowBalloonTip(title, message, BalloonIcon.Info);
+    }
+
+    private void OnContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (_recentRoot is null || _getRecentTranslations is null)
+            return;
+
+        _recentRoot.Items.Clear();
+        var entries = _getRecentTranslations();
+        if (entries.Count == 0)
+        {
+            _recentRoot.Items.Add(new MenuItem { Header = "(none yet)", IsEnabled = false });
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            var header = TruncateForMenu(entry.Translation, 80);
+            var item = new MenuItem
+            {
+                Header = header,
+                ToolTip = entry.Translation,
+            };
+            var captured = entry;
+            item.Click += (_, _) => _onRecentTranslationSelected?.Invoke(captured);
+            _recentRoot.Items.Add(item);
+        }
+    }
+
+    private static string TruncateForMenu(string text, int maxChars)
+    {
+        var normalized = text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (normalized.Length <= maxChars)
+            return normalized;
+
+        return normalized[..maxChars] + "…";
     }
 
     private void UpdateTooltip()

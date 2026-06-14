@@ -19,6 +19,7 @@ public sealed class TranslationCoordinator
     private readonly OcrEngine _ocrEngine;
     private readonly Translator _translator;
     private readonly DeepLUsageService _usageService;
+    private readonly TranslationCache _translationCache;
     private readonly OverlayWindow _overlayWindow;
     private readonly TrayService _trayService;
     private readonly RegionSelector _regionSelector;
@@ -39,6 +40,7 @@ public sealed class TranslationCoordinator
         OcrEngine ocrEngine,
         Translator translator,
         DeepLUsageService usageService,
+        TranslationCache translationCache,
         OverlayWindow overlayWindow,
         TrayService trayService,
         RegionSelector regionSelector)
@@ -47,6 +49,7 @@ public sealed class TranslationCoordinator
         _ocrEngine = ocrEngine;
         _translator = translator;
         _usageService = usageService;
+        _translationCache = translationCache;
         _overlayWindow = overlayWindow;
         _trayService = trayService;
         _regionSelector = regionSelector;
@@ -108,6 +111,25 @@ public sealed class TranslationCoordinator
             LogService.Instance.Info("Overlay dismissed via hotkey");
             _overlayWindow.Dismiss();
         }
+    }
+
+    public IReadOnlyList<TranslationHistoryEntry> GetRecentTranslations() =>
+        _translationCache.GetRecent();
+
+    public void ShowRecentTranslation(TranslationHistoryEntry entry)
+    {
+        LogService.Instance.Info(
+            $"Recent translation selected: {entry.SourceLang}->{entry.TargetLang}, length={entry.Translation.Length}");
+        _overlayWindow.SetContent(entry.SourceText, entry.Translation);
+        _overlayWindow.ShowOverlay();
+    }
+
+    public void InvalidateTranslationCaches()
+    {
+        _translationCache.Clear();
+        _translator.InvalidateClient();
+        _ocrEngine.InvalidateEngine();
+        LogService.Instance.Info("Translation caches cleared");
     }
 
     private void OnRegionSelected(object? sender, Int32Rect region)
@@ -259,15 +281,27 @@ public sealed class TranslationCoordinator
             }
 
             _consecutiveEmptyOcr = 0;
+            var sourceLangCode = _settingsService.Current.SourceLang;
+            var targetLangCode = _settingsService.Current.TargetLang;
+
+            if (_translationCache.TryGet(sourceLangCode, targetLangCode, ocrText, out var cached))
+            {
+                LogService.Instance.Info("Translation cache hit");
+                _overlayWindow.SetContent(cached.SourceText, cached.Translation);
+                _overlayWindow.ShowOverlay();
+                return;
+            }
+
             _overlayWindow.SetContent(ocrText, null);
 
             var translated = await _translator.TranslateAsync(
                 _settingsService.Current.DeeplApiKey,
-                _settingsService.Current.SourceLang,
-                _settingsService.Current.TargetLang,
+                sourceLangCode,
+                targetLangCode,
                 ocrText).ConfigureAwait(true);
 
             LogService.Instance.Info($"Translation success: output length={translated.Length}");
+            _translationCache.Add(sourceLangCode, targetLangCode, ocrText, ocrText, translated);
             _overlayWindow.SetContent(ocrText, translated);
             _overlayWindow.ShowOverlay();
             await RefreshQuotaAfterTranslateAsync().ConfigureAwait(true);
