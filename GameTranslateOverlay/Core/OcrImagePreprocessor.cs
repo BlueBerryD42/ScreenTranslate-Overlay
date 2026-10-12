@@ -18,25 +18,38 @@ public static class OcrImagePreprocessor
     private const int MaxDimension = 4096;
     private const double ContrastFactor = 1.2;
 
-    public static string Prepare(string capturePath)
+    public static Bitmap Prepare(Bitmap source, out bool wasPreprocessed)
     {
-        using var source = new Bitmap(capturePath);
         if (!ShouldPreprocess(source.Width, source.Height))
         {
             LogService.Instance.Info($"OCR prep: skipped ({source.Width}x{source.Height})");
-            return capturePath;
+            wasPreprocessed = false;
+            return source;
         }
 
-        using var processed = ProcessBitmap(source);
-        var outputPath = Path.Combine(Path.GetTempPath(), $"gto_prep_{Guid.NewGuid():N}.png");
-        processed.Save(outputPath, ImageFormat.Png);
-
+        var processed = ProcessBitmap(source);
         var scale = processed.Width / (double)source.Width;
         LogService.Instance.Info(
             $"OCR prep: {source.Width}x{source.Height} → {processed.Width}x{processed.Height} " +
             $"(scale={scale:F2}), contrast=applied");
 
-        return outputPath;
+        wasPreprocessed = true;
+        return processed;
+    }
+
+    public static string Prepare(string capturePath)
+    {
+        using var source = new Bitmap(capturePath);
+        var processed = Prepare(source, out var wasPreprocessed);
+        if (!wasPreprocessed)
+            return capturePath;
+
+        using (processed)
+        {
+            var outputPath = Path.Combine(Path.GetTempPath(), $"gto_prep_{Guid.NewGuid():N}.png");
+            processed.Save(outputPath, ImageFormat.Png);
+            return outputPath;
+        }
     }
 
     internal static bool ShouldPreprocess(int width, int height)

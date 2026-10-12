@@ -1,4 +1,5 @@
-﻿using System.Windows;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -10,18 +11,30 @@ namespace GameTranslateOverlay.UI;
 
 public partial class OverlayWindow : Window
 {
+    public event EventHandler<(string? source, string? target)>? LanguageChanged;
+    public event EventHandler? RetranslateRequested;
+
     private readonly DispatcherTimer _autoHideTimer;
+    private TimeSpan _autoHideDuration = TimeSpan.FromSeconds(15);
+    private TimeSpan _autoHideElapsed = TimeSpan.Zero;
+    private string _currentSourceLang = "JA";
+    private string _currentTargetLang = "EN-US";
+    private string _lastSource = string.Empty;
     private string _lastTranslation = string.Empty;
     private CaptureRegionSettings? _anchorRegion;
     private bool _autoHidePaused;
+    private bool _isMouseOver;
+    private bool _isMenuOpen;
     private bool _pendingTopmostRefresh;
     private bool _rememberOverlayPosition;
     private bool _userHasCustomPosition;
 
+    public string CurrentSourceText => _lastSource;
+
     public OverlayWindow()
     {
         InitializeComponent();
-        _autoHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _autoHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _autoHideTimer.Tick += OnAutoHideTick;
         SourceInitialized += OnSourceInitialized;
         Hide();
@@ -33,6 +46,10 @@ public partial class OverlayWindow : Window
         TranslationText.FontSize = overlay.FontSize;
         TranslationText.Foreground = BrushFromHex(overlay.TextColor);
 
+        _currentSourceLang = settings.SourceLang;
+        _currentTargetLang = settings.TargetLang;
+        LangBadgeText.Text = $"{settings.SourceLang} \u2192 {settings.TargetLang}";
+
         var bg = BrushFromHex(overlay.BackgroundColor);
         if (bg is System.Windows.Media.SolidColorBrush solid)
         {
@@ -43,11 +60,7 @@ public partial class OverlayWindow : Window
         }
 
         _rememberOverlayPosition = overlay.RememberOverlayPosition;
-
-        if (overlay.AutoHideSeconds > 0)
-            _autoHideTimer.Interval = TimeSpan.FromSeconds(overlay.AutoHideSeconds);
-        else
-            _autoHideTimer.Interval = TimeSpan.Zero;
+        _autoHideDuration = overlay.AutoHideSeconds > 0 ? TimeSpan.FromSeconds(overlay.AutoHideSeconds) : TimeSpan.Zero;
 
         if (IsVisible)
         {
@@ -88,16 +101,10 @@ public partial class OverlayWindow : Window
 
     public void SetContent(string? source, string? translation)
     {
-        if (string.IsNullOrWhiteSpace(source))
-        {
-            SourceText.Visibility = Visibility.Collapsed;
-            SourceText.Text = string.Empty;
-        }
-        else
-        {
-            SourceText.Text = source;
-            SourceText.Visibility = Visibility.Visible;
-        }
+        var hasSource = !string.IsNullOrWhiteSpace(source);
+        SourceText.Text = source ?? string.Empty;
+        OrigButton.Visibility = hasSource ? Visibility.Visible : Visibility.Collapsed;
+        SourceText.Visibility = (hasSource && OrigButton.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
 
         TranslationText.Text = translation ?? "Translating...";
         _lastTranslation = translation ?? string.Empty;
@@ -191,12 +198,34 @@ public partial class OverlayWindow : Window
     private void RestartAutoHideTimer()
     {
         _autoHideTimer.Stop();
-        if (_autoHidePaused)
+        _autoHideElapsed = TimeSpan.Zero;
+        if (_autoHidePaused || _autoHideDuration <= TimeSpan.Zero)
+        {
+            AutoHideProgress.Visibility = Visibility.Collapsed;
             return;
+        }
 
-        var seconds = _autoHideTimer.Interval.TotalSeconds;
-        if (seconds > 0)
-            _autoHideTimer.Start();
+        AutoHideProgress.Value = 100;
+        AutoHideProgress.Visibility = Visibility.Visible;
+        _autoHideTimer.Start();
+    }
+
+    private void OnOverlayMouseEnter(object sender, MouseEventArgs e)
+    {
+        _isMouseOver = true;
+    }
+
+    private void OnOverlayMouseLeave(object sender, MouseEventArgs e)
+    {
+        _isMouseOver = false;
+    }
+
+    private void OnOrigToggleClick(object sender, RoutedEventArgs e)
+    {
+        var showOrig = OrigButton.IsChecked == true;
+        SourceText.Visibility = (showOrig && !string.IsNullOrWhiteSpace(SourceText.Text))
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void OnKeepClick(object sender, RoutedEventArgs e)
@@ -205,6 +234,7 @@ public partial class OverlayWindow : Window
         if (_autoHidePaused)
         {
             _autoHideTimer.Stop();
+            AutoHideProgress.Visibility = Visibility.Collapsed;
             LogService.Instance.Info("Overlay auto-hide paused (Keep)");
             return;
         }
@@ -216,15 +246,27 @@ public partial class OverlayWindow : Window
 
     private void OnAutoHideTick(object? sender, EventArgs e)
     {
-        if (_autoHidePaused)
+        if (_autoHidePaused || _isMouseOver || _isMenuOpen || _autoHideDuration <= TimeSpan.Zero)
             return;
 
-        Dismiss();
+        _autoHideElapsed += TimeSpan.FromMilliseconds(100);
+        var remaining = _autoHideDuration - _autoHideElapsed;
+        if (remaining <= TimeSpan.Zero)
+        {
+            AutoHideProgress.Value = 0;
+            Dismiss();
+        }
+        else
+        {
+            var pct = (remaining.TotalMilliseconds / _autoHideDuration.TotalMilliseconds) * 100.0;
+            AutoHideProgress.Value = Math.Clamp(pct, 0, 100);
+        }
     }
 
     public void Dismiss()
     {
         _autoHideTimer.Stop();
+        AutoHideProgress.Visibility = Visibility.Collapsed;
         Hide();
     }
 
@@ -233,10 +275,130 @@ public partial class OverlayWindow : Window
         Dismiss();
     }
 
+    private void OnLangSwitchClick(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu();
+
+        // 1. Target Language Submenu
+        var targetSubmenu = new MenuItem { Header = "Target Language" };
+        foreach (var lang in LanguageCatalog.TargetLanguages)
+        {
+            var item = new MenuItem
+            {
+                Header = lang.Label,
+                IsCheckable = true,
+                IsChecked = lang.Code.Equals(_currentTargetLang, StringComparison.OrdinalIgnoreCase)
+            };
+            var code = lang.Code;
+            item.Click += (_, _) =>
+            {
+                _currentTargetLang = code;
+                LangBadgeText.Text = $"{_currentSourceLang} \u2192 {_currentTargetLang}";
+                LanguageChanged?.Invoke(this, (null, code));
+            };
+            targetSubmenu.Items.Add(item);
+        }
+        menu.Items.Add(targetSubmenu);
+
+        // 2. Source Language Submenu
+        var sourceSubmenu = new MenuItem { Header = "Source Language" };
+        foreach (var lang in LanguageCatalog.SourceLanguages)
+        {
+            var isOcrReady = GameTranslateOverlay.Core.OcrEngine.IsLanguageAvailable(lang.Code);
+            var headerText = isOcrReady ? lang.Label : $"{lang.Label} (OCR missing ⚠)";
+            var item = new MenuItem
+            {
+                Header = headerText,
+                IsCheckable = true,
+                IsChecked = lang.Code.Equals(_currentSourceLang, StringComparison.OrdinalIgnoreCase),
+                ToolTip = isOcrReady ? null : $"Windows OCR package is not installed for {lang.Label}."
+            };
+            var code = lang.Code;
+            item.Click += (_, _) =>
+            {
+                _currentSourceLang = code;
+                LangBadgeText.Text = $"{_currentSourceLang} \u2192 {_currentTargetLang}";
+                LanguageChanged?.Invoke(this, (code, null));
+            };
+            sourceSubmenu.Items.Add(item);
+        }
+        menu.Items.Add(sourceSubmenu);
+
+        menu.Items.Add(new Separator());
+
+        // 3. Quick Swap Item
+        var swapItem = new MenuItem { Header = $"\u21C4 Swap ({_currentTargetLang} \u21C4 {_currentSourceLang})" };
+        swapItem.Click += (_, _) =>
+        {
+            var temp = _currentSourceLang;
+            _currentSourceLang = _currentTargetLang;
+            _currentTargetLang = temp;
+            LangBadgeText.Text = $"{_currentSourceLang} \u2192 {_currentTargetLang}";
+            LanguageChanged?.Invoke(this, (_currentSourceLang, _currentTargetLang));
+        };
+        menu.Items.Add(swapItem);
+
+        // 4. Re-translate Item
+        if (!string.IsNullOrWhiteSpace(_lastSource))
+        {
+            var retranslateItem = new MenuItem { Header = "\u21BB Re-translate" };
+            retranslateItem.Click += (_, _) => RetranslateRequested?.Invoke(this, EventArgs.Empty);
+            menu.Items.Add(retranslateItem);
+        }
+
+        LangSwitchButton.ContextMenu = menu;
+        menu.PlacementTarget = LangSwitchButton;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.Opened += (_, _) =>
+        {
+            _isMenuOpen = true;
+            _autoHideTimer.Stop();
+        };
+        menu.Closed += (_, _) =>
+        {
+            _isMenuOpen = false;
+            if (IsVisible && !_autoHidePaused && !_isMouseOver)
+                _autoHideTimer.Start();
+        };
+        menu.IsOpen = true;
+    }
+
+    private DispatcherTimer? _copyFeedbackTimer;
+
     private void OnCopyClick(object sender, RoutedEventArgs e)
     {
-        if (!string.IsNullOrWhiteSpace(_lastTranslation))
-            Clipboard.SetText(_lastTranslation);
+        if (string.IsNullOrWhiteSpace(_lastTranslation))
+            return;
+
+        try
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                try
+                {
+                    Clipboard.SetDataObject(_lastTranslation, true);
+                    break;
+                }
+                catch (System.Runtime.InteropServices.COMException) when (i < 2)
+                {
+                    System.Threading.Thread.Sleep(50);
+                }
+            }
+
+            CopyButton.Content = "Copied!";
+            _copyFeedbackTimer?.Stop();
+            _copyFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+            _copyFeedbackTimer.Tick += (_, _) =>
+            {
+                _copyFeedbackTimer.Stop();
+                CopyButton.Content = "Copy";
+            };
+            _copyFeedbackTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            LogService.Instance.Warn($"Clipboard copy failed: {ex.Message}");
+        }
     }
 
     private void OnDragHandleDown(object sender, MouseButtonEventArgs e)

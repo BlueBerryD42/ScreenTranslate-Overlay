@@ -1,4 +1,4 @@
-﻿using System.Windows.Input;
+using System.Windows.Input;
 
 namespace GameTranslateOverlay.Helpers;
 
@@ -81,6 +81,12 @@ public static class HotkeyParser
                 vk = (uint)c;
                 return true;
             }
+        }
+
+        if (token.Equals("Esc", StringComparison.OrdinalIgnoreCase) || token.Equals("Escape", StringComparison.OrdinalIgnoreCase))
+        {
+            vk = 0x1B; // VK_ESCAPE
+            return true;
         }
 
         if (Enum.TryParse<Key>(token, ignoreCase: true, out var wpfKey) && wpfKey != Key.None)

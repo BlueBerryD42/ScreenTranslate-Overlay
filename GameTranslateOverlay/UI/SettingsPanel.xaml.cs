@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
@@ -6,6 +6,8 @@ using GameTranslateOverlay.Core;
 using GameTranslateOverlay.Helpers;
 using GameTranslateOverlay.Models;
 using GameTranslateOverlay.Services;
+using System.Windows.Input;
+using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
 
 namespace GameTranslateOverlay.UI;
@@ -27,6 +29,9 @@ public partial class SettingsPanel : Window
     private string _textColorHex = "#FFFFFF";
     private string _backgroundColorHex = "#000000";
 
+    private bool _isLoadingSettings;
+    private readonly DispatcherTimer _autoSaveFeedbackTimer;
+
     public SettingsPanel(
         SettingsService settingsService,
         StartupService startupService,
@@ -39,12 +44,169 @@ public partial class SettingsPanel : Window
         _translator = translator;
         _usageService = usageService;
         _onSaved = onSaved;
+
+        _autoSaveFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        _autoSaveFeedbackTimer.Tick += (_, _) =>
+        {
+            _autoSaveFeedbackTimer.Stop();
+            if (AutoSaveStatusText != null)
+                AutoSaveStatusText.Text = "All changes auto-save";
+        };
+
         InitializeComponent();
+        AttachHotkeyRecorder(TranslateHotkeyBox, AutoSave);
+        AttachHotkeyRecorder(PickRegionHotkeyBox, AutoSave);
+        AttachHotkeyRecorder(DismissHotkeyBox, AutoSave);
         PopulateLanguageCombos();
         LoadFromSettings();
-        FontSizeSlider.ValueChanged += (_, _) => FontSizeLabel.Text = FontSizeSlider.Value.ToString("0");
-        OpacitySlider.ValueChanged += (_, _) => OpacityLabel.Text = $"{OpacitySlider.Value * 100:0}%";
-        Loaded += async (_, _) => await RefreshQuotaDisplayAsync();
+
+        // Wire change events for automatic instant save
+        ApiKeyBox.PasswordChanged += (_, _) => AutoSave();
+        ApiKeyVisibleBox.TextChanged += (_, _) => AutoSave();
+        TargetLangCombo.SelectionChanged += (_, _) => AutoSave();
+        AutoHideBox.LostFocus += (_, _) => AutoSave();
+        RememberOverlayPositionBox.Click += (_, _) => AutoSave();
+        StartWithWindowsBox.Click += (_, _) => AutoSave();
+
+        FontSizeSlider.ValueChanged += (_, _) =>
+        {
+            FontSizeLabel.Text = FontSizeSlider.Value.ToString("0");
+            UpdateLivePreview();
+            AutoSave();
+        };
+        OpacitySlider.ValueChanged += (_, _) =>
+        {
+            OpacityLabel.Text = $"{OpacitySlider.Value * 100:0}%";
+            UpdateLivePreview();
+            AutoSave();
+        };
+        Loaded += async (_, _) =>
+        {
+            UpdateLivePreview();
+            await RefreshQuotaDisplayAsync();
+        };
+    }
+
+    private void AutoSave()
+    {
+        if (_isLoadingSettings)
+            return;
+
+        int autoHide = 15;
+        if (int.TryParse(AutoHideBox.Text.Trim(), out var parsedHide) && parsedHide >= 0)
+            autoHide = parsedHide;
+
+        var startWithWindows = StartWithWindowsBox.IsChecked == true;
+        var exePath = Environment.ProcessPath ?? AppContext.BaseDirectory;
+
+        _settingsService.Update(s =>
+        {
+            s.DeeplApiKey = GetApiKeyValue();
+            s.SourceLang = GetSelectedLang(SourceLangCombo) ?? s.SourceLang;
+            s.TargetLang = GetSelectedLang(TargetLangCombo) ?? s.TargetLang;
+
+            if (HotkeyParser.TryParse(TranslateHotkeyBox.Text.Trim(), out _, out _))
+                s.Hotkeys.Translate = TranslateHotkeyBox.Text.Trim();
+            if (HotkeyParser.TryParse(PickRegionHotkeyBox.Text.Trim(), out _, out _))
+                s.Hotkeys.PickRegion = PickRegionHotkeyBox.Text.Trim();
+            if (HotkeyParser.TryParse(DismissHotkeyBox.Text.Trim(), out _, out _))
+                s.Hotkeys.Dismiss = DismissHotkeyBox.Text.Trim();
+
+            s.Overlay.TextColor = _textColorHex;
+            s.Overlay.BackgroundColor = _backgroundColorHex;
+            s.Overlay.BackgroundOpacity = OpacitySlider.Value;
+            s.Overlay.FontSize = FontSizeSlider.Value;
+            s.Overlay.AutoHideSeconds = autoHide;
+            s.Overlay.RememberOverlayPosition = RememberOverlayPositionBox.IsChecked == true;
+            s.StartWithWindows = startWithWindows;
+        });
+
+        _startupService.SetEnabled(startWithWindows, exePath);
+        _onSaved();
+
+        if (AutoSaveStatusText != null)
+        {
+            AutoSaveStatusText.Text = "Saved \u2713";
+            _autoSaveFeedbackTimer.Stop();
+            _autoSaveFeedbackTimer.Start();
+        }
+    }
+
+    private string GetApiKeyValue() =>
+        ApiKeyVisibleBox.Visibility == Visibility.Visible ? ApiKeyVisibleBox.Text.Trim() : ApiKeyBox.Password.Trim();
+
+    private void OnToggleKeyVisibilityClick(object sender, RoutedEventArgs e)
+    {
+        if (ApiKeyVisibleBox.Visibility == Visibility.Visible)
+        {
+            ApiKeyBox.Password = ApiKeyVisibleBox.Text;
+            ApiKeyVisibleBox.Visibility = Visibility.Collapsed;
+            ApiKeyBox.Visibility = Visibility.Visible;
+            ToggleKeyVisibilityButton.Content = "Show";
+        }
+        else
+        {
+            ApiKeyVisibleBox.Text = ApiKeyBox.Password;
+            ApiKeyBox.Visibility = Visibility.Collapsed;
+            ApiKeyVisibleBox.Visibility = Visibility.Visible;
+            ToggleKeyVisibilityButton.Content = "Hide";
+        }
+    }
+
+    private void UpdateLivePreview()
+    {
+        if (PreviewPill is null || PreviewTextSample is null)
+            return;
+
+        PreviewTextSample.FontSize = FontSizeSlider.Value;
+        PreviewTextSample.Foreground = TryBrushFromHex(_textColorHex);
+
+        var bg = TryBrushFromHex(_backgroundColorHex);
+        if (bg is SolidColorBrush solid)
+        {
+            var c = solid.Color;
+            PreviewPill.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
+                (byte)(OpacitySlider.Value * 255), c.R, c.G, c.B));
+        }
+    }
+
+    private void AttachHotkeyRecorder(System.Windows.Controls.TextBox box, Action onRecorded)
+    {
+        box.IsReadOnly = true;
+        box.Cursor = Cursors.Hand;
+        box.ToolTip = "Click and press any key combination to record hotkey";
+
+        box.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Tab)
+                return;
+
+            e.Handled = true;
+
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
+                return;
+
+            var parts = new List<string>();
+            var mods = Keyboard.Modifiers;
+
+            if (mods.HasFlag(ModifierKeys.Control))
+                parts.Add("Ctrl");
+            if (mods.HasFlag(ModifierKeys.Alt))
+                parts.Add("Alt");
+            if (mods.HasFlag(ModifierKeys.Shift))
+                parts.Add("Shift");
+            if (mods.HasFlag(ModifierKeys.Windows))
+                parts.Add("Win");
+
+            parts.Add(key.ToString());
+            box.Text = string.Join("+", parts);
+
+            // Release focus so the user doesn't accidentally trigger or re-record
+            Keyboard.ClearFocus();
+            Focus();
+            onRecorded();
+        };
     }
 
     private void PopulateLanguageCombos()
@@ -58,25 +220,35 @@ public partial class SettingsPanel : Window
 
     private void LoadFromSettings()
     {
-        var s = _settingsService.Current;
-        ApiKeyBox.Password = s.DeeplApiKey;
-        SelectLang(SourceLangCombo, s.SourceLang);
-        SelectLang(TargetLangCombo, s.TargetLang);
-        TranslateHotkeyBox.Text = s.Hotkeys.Translate;
-        PickRegionHotkeyBox.Text = s.Hotkeys.PickRegion;
-        DismissHotkeyBox.Text = s.Hotkeys.Dismiss;
-        SetTextColor(s.Overlay.TextColor);
-        SetBackgroundColor(s.Overlay.BackgroundColor);
-        OpacitySlider.Value = s.Overlay.BackgroundOpacity;
-        OpacityLabel.Text = $"{s.Overlay.BackgroundOpacity * 100:0}%";
-        FontSizeSlider.Value = s.Overlay.FontSize;
-        FontSizeLabel.Text = s.Overlay.FontSize.ToString("0");
-        AutoHideBox.Text = s.Overlay.AutoHideSeconds.ToString();
-        RememberOverlayPositionBox.IsChecked = s.Overlay.RememberOverlayPosition;
-        StartWithWindowsBox.IsChecked = s.StartWithWindows;
-        LogPathText.Text = LogService.Instance.GetTodayLogPath();
-        UpdateOcrStatus();
-        SetQuotaStatus("Enter an API key to view quota.", QuotaOkBrush, null);
+        _isLoadingSettings = true;
+        try
+        {
+            var s = _settingsService.Current;
+            ApiKeyBox.Password = s.DeeplApiKey;
+            ApiKeyVisibleBox.Text = s.DeeplApiKey;
+            SelectLang(SourceLangCombo, s.SourceLang);
+            SelectLang(TargetLangCombo, s.TargetLang);
+            TranslateHotkeyBox.Text = s.Hotkeys.Translate;
+            PickRegionHotkeyBox.Text = s.Hotkeys.PickRegion;
+            DismissHotkeyBox.Text = s.Hotkeys.Dismiss;
+            SetTextColor(s.Overlay.TextColor);
+            SetBackgroundColor(s.Overlay.BackgroundColor);
+            OpacitySlider.Value = s.Overlay.BackgroundOpacity;
+            OpacityLabel.Text = $"{s.Overlay.BackgroundOpacity * 100:0}%";
+            FontSizeSlider.Value = s.Overlay.FontSize;
+            FontSizeLabel.Text = s.Overlay.FontSize.ToString("0");
+            AutoHideBox.Text = s.Overlay.AutoHideSeconds.ToString();
+            RememberOverlayPositionBox.IsChecked = s.Overlay.RememberOverlayPosition;
+            StartWithWindowsBox.IsChecked = s.StartWithWindows;
+            LogPathText.Text = LogService.Instance.GetTodayLogPath();
+            UpdateOcrStatus();
+            SetQuotaStatus("Enter an API key to view quota.", QuotaOkBrush, null);
+            UpdateLivePreview();
+        }
+        finally
+        {
+            _isLoadingSettings = false;
+        }
     }
 
     private async void OnRefreshQuotaClick(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
@@ -84,7 +256,7 @@ public partial class SettingsPanel : Window
 
     private async Task RefreshQuotaDisplayAsync(bool forceRefresh = false)
     {
-        var key = ApiKeyBox.Password;
+        var key = GetApiKeyValue();
         if (string.IsNullOrWhiteSpace(key))
         {
             SetQuotaStatus("Enter an API key to view quota.", QuotaOkBrush, null);
@@ -167,6 +339,7 @@ public partial class SettingsPanel : Window
         _textColorHex = NormalizeHex(hex);
         TextColorHexLabel.Text = _textColorHex;
         TextColorSwatch.Background = TryBrushFromHex(_textColorHex);
+        UpdateLivePreview();
     }
 
     private void SetBackgroundColor(string hex)
@@ -174,6 +347,7 @@ public partial class SettingsPanel : Window
         _backgroundColorHex = NormalizeHex(hex);
         BackgroundColorHexLabel.Text = _backgroundColorHex;
         BackgroundColorSwatch.Background = TryBrushFromHex(_backgroundColorHex);
+        UpdateLivePreview();
     }
 
     private void PickTextColor(object sender, RoutedEventArgs e)
@@ -284,7 +458,7 @@ public partial class SettingsPanel : Window
     {
         try
         {
-            var key = ApiKeyBox.Password;
+            var key = GetApiKeyValue();
             if (string.IsNullOrWhiteSpace(key))
             {
                 MessageBox.Show(this, "Enter an API key first.", "Test API", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -346,7 +520,7 @@ public partial class SettingsPanel : Window
 
         _settingsService.Update(s =>
         {
-            s.DeeplApiKey = ApiKeyBox.Password;
+            s.DeeplApiKey = GetApiKeyValue();
             s.SourceLang = GetSelectedLang(SourceLangCombo) ?? s.SourceLang;
             s.TargetLang = GetSelectedLang(TargetLangCombo) ?? s.TargetLang;
             s.Hotkeys.Translate = TranslateHotkeyBox.Text.Trim();
@@ -366,6 +540,46 @@ public partial class SettingsPanel : Window
         _onSaved();
         Close();
     }
+
+    private void OnResetTranslationClick(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Update(s =>
+        {
+            s.SourceLang = "JA";
+            s.TargetLang = "EN-US";
+        });
+        LoadFromSettings();
+        _onSaved();
+    }
+
+    private void OnResetHotkeysClick(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Update(s =>
+        {
+            s.Hotkeys.Translate = "F10";
+            s.Hotkeys.PickRegion = "F9";
+            s.Hotkeys.Dismiss = "Escape";
+        });
+        LoadFromSettings();
+        _onSaved();
+    }
+
+    private void OnResetAppearanceClick(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Update(s =>
+        {
+            s.Overlay.TextColor = "#F5F5F7";
+            s.Overlay.BackgroundColor = "#0A0A0B";
+            s.Overlay.BackgroundOpacity = 0.92;
+            s.Overlay.FontSize = 12;
+            s.Overlay.AutoHideSeconds = 15;
+            s.Overlay.RememberOverlayPosition = true;
+        });
+        LoadFromSettings();
+        _onSaved();
+    }
+
+    private void OnCloseButtonClick(object sender, RoutedEventArgs e) => Close();
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
 

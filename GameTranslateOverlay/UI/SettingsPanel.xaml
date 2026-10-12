@@ -1,121 +1,454 @@
-﻿<Window x:Class="GameTranslateOverlay.UI.SettingsPanel"
+<Window x:Class="GameTranslateOverlay.UI.SettingsPanel"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings"
-        Width="340"
-        MaxHeight="480"
+        Title="Settings — GameTranslateOverlay"
+        Width="800"
+        Height="620"
+        MinWidth="720"
+        MinHeight="480"
         WindowStartupLocation="CenterScreen"
         Style="{StaticResource SettingsWindowStyle}"
-        ResizeMode="NoResize">
+        ResizeMode="CanResize">
     <Window.Resources>
+        <!-- DataTemplate for Language ComboBoxes -->
         <DataTemplate x:Key="LangItemTemplate">
-            <TextBlock Text="{Binding Label}" Foreground="#111111" FontFamily="{StaticResource UiFontFamily}" FontSize="12" />
+            <TextBlock Text="{Binding Label}" Foreground="{StaticResource HudTextBrush}" FontFamily="{StaticResource UiFontFamily}" FontSize="12" />
         </DataTemplate>
+
+        <!-- Brand Accent Link Color & Brush with Hover Effect -->
+        <Color x:Key="AccentLinkColor">#2563EB</Color>
+        <Color x:Key="AccentLinkHoverColor">#3B82F6</Color>
+        <SolidColorBrush x:Key="AccentLinkBrush" Color="{StaticResource AccentLinkColor}" />
+
+        <Style x:Key="CardStyle" TargetType="Border" BasedOn="{StaticResource SettingsCardStyle}">
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Padding" Value="14,12" />
+        </Style>
+
+        <Style x:Key="CardResetButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <Style x:Key="HintTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource HudMutedBrush}" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style x:Key="InlineLinkStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource AccentLinkBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="TextDecorations" Value="Underline" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground">
+                        <Setter.Value>
+                            <SolidColorBrush Color="{StaticResource AccentLinkHoverColor}" />
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
-    <Border Padding="6" Background="{StaticResource HudBackgroundBrush}">
+
+    <Border Padding="16,14" Background="{StaticResource HudBackgroundBrush}">
         <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
-                <StackPanel Margin="0,0,0,4">
-                    <TextBlock Text="GameTranslateOverlay" Style="{StaticResource HudTextBlockStyle}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
+            <!-- Title Header: Right element declared first for robust DockPanel layout -->
+            <!-- Temporary disable for a cleaner UI   -->
+            <!-- <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                <TextBlock DockPanel.Dock="Right"
+                           Text="Settings &amp; Preferences"
+                           Foreground="{StaticResource HudMutedBrush}"
+                           FontSize="11"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="GameTranslateOverlay"
+                           Style="{StaticResource HudTextBlockStyle}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+            </DockPanel> -->
 
-                    <TextBlock Text="Translation" Style="{StaticResource SectionHeaderStyle}" />
-                    <TextBlock Text="DeepL API key" Style="{StaticResource FieldLabelStyle}" />
-                    <PasswordBox x:Name="ApiKeyBox" Margin="0,0,0,4" />
-                    <Button Content="Test API" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Left" Margin="0,0,0,4" Click="OnTestApiClick" />
-                    <TextBlock Text="DeepL quota" Style="{StaticResource FieldLabelStyle}" />
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBlock x:Name="QuotaStatusText" TextWrapping="Wrap" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock x:Name="RefreshQuotaLink" Margin="6,0,0,0" VerticalAlignment="Center" FontSize="11" Cursor="Hand" TextDecorations="Underline" Foreground="#2563EB" MouseLeftButtonUp="OnRefreshQuotaClick">
-                            <Run Text="Refresh" />
-                        </TextBlock>
+            <!-- Main 2-Column Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,6,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left Column: Translation & Hotkeys -->
+                    <StackPanel Grid.Column="0">
+                        <!-- Card 1: API & Translation -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,8">
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Reset"
+                                            Style="{StaticResource CardResetButtonStyle}"
+                                            Click="OnResetTranslationClick"
+                                            ToolTip="Reset Translation settings to default"
+                                            AutomationProperties.Name="Reset Translation Settings" />
+                                    <TextBlock Text="TRANSLATION &amp; DEEPL"
+                                               Style="{StaticResource SectionHeaderStyle}"
+                                               FontSize="12"
+                                               Margin="0"
+                                               VerticalAlignment="Center" />
+                                </DockPanel>
+
+                                <TextBlock Text="DeepL API Key" Style="{StaticResource FieldLabelStyle}" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <PasswordBox x:Name="ApiKeyBox"
+                                                 Grid.Column="0"
+                                                 Margin="0,0,6,0"
+                                                 AutomationProperties.Name="DeepL API Key Hidden" />
+                                    <TextBox x:Name="ApiKeyVisibleBox"
+                                             Grid.Column="0"
+                                             Margin="0,0,6,0"
+                                             Visibility="Collapsed"
+                                             AutomationProperties.Name="DeepL API Key Visible" />
+                                    <Button x:Name="ToggleKeyVisibilityButton"
+                                            Content="Show"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Grid.Column="1"
+                                            Padding="10,2"
+                                            FontSize="11"
+                                            Click="OnToggleKeyVisibilityClick"
+                                            AutomationProperties.Name="Toggle API Key Visibility" />
+                                </Grid>
+
+                                <DockPanel Margin="0,0,0,6">
+                                    <TextBlock x:Name="RefreshQuotaLink"
+                                               DockPanel.Dock="Right"
+                                               Style="{StaticResource InlineLinkStyle}"
+                                               Margin="8,0,0,0"
+                                               VerticalAlignment="Center"
+                                               MouseLeftButtonUp="OnRefreshQuotaClick"
+                                               AutomationProperties.Name="Refresh Quota Link">
+                                        <Run Text="Refresh quota" />
+                                    </TextBlock>
+                                    <Button DockPanel.Dock="Left"
+                                            Content="Test API"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="10,3"
+                                            FontSize="11"
+                                            Click="OnTestApiClick"
+                                            AutomationProperties.Name="Test API Connection" />
+                                </DockPanel>
+
+                                <TextBlock x:Name="QuotaStatusText"
+                                           TextWrapping="Wrap"
+                                           FontSize="11"
+                                           Margin="0,0,0,10"
+                                           VerticalAlignment="Center" />
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Source Language" Style="{StaticResource FieldLabelStyle}" />
+                                        <ComboBox x:Name="SourceLangCombo"
+                                                  SelectionChanged="OnSourceLangChanged"
+                                                  ItemTemplate="{StaticResource LangItemTemplate}"
+                                                  AutomationProperties.Name="Source Language" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Target Language" Style="{StaticResource FieldLabelStyle}" />
+                                        <ComboBox x:Name="TargetLangCombo"
+                                                  ItemTemplate="{StaticResource LangItemTemplate}"
+                                                  AutomationProperties.Name="Target Language" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Windows OCR Row: Label and Link on top row, status text wrapped on row below -->
+                                <DockPanel Margin="0,2,0,2">
+                                    <TextBlock x:Name="OcrSettingsLink"
+                                               DockPanel.Dock="Right"
+                                               Style="{StaticResource InlineLinkStyle}"
+                                               Visibility="Collapsed"
+                                               MouseLeftButtonUp="OnOcrSettingsLinkClick"
+                                               AutomationProperties.Name="Open Windows Language Settings">
+                                        <Run Text="Language settings" />
+                                    </TextBlock>
+                                    <TextBlock Text="Windows OCR" Style="{StaticResource FieldLabelStyle}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <TextBlock x:Name="OcrStatusText"
+                                           TextWrapping="Wrap"
+                                           FontSize="11"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 2: Hotkeys -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,4">
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Reset"
+                                            Style="{StaticResource CardResetButtonStyle}"
+                                            Click="OnResetHotkeysClick"
+                                            ToolTip="Reset hotkeys to default"
+                                            AutomationProperties.Name="Reset Hotkeys Settings" />
+                                    <TextBlock Text="HOTKEYS &amp; SHORTCUTS"
+                                               Style="{StaticResource SectionHeaderStyle}"
+                                               FontSize="12"
+                                               Margin="0"
+                                               VerticalAlignment="Center" />
+                                </DockPanel>
+
+                                <!-- Dedicated hint line below title -->
+                                <TextBlock Text="Click box &amp; press key combination to rebind"
+                                           Style="{StaticResource HintTextStyle}"
+                                           Margin="0,0,0,8" />
+
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Translate" Style="{StaticResource FieldLabelStyle}" />
+                                    <TextBox Grid.Row="1" Grid.Column="0" x:Name="TranslateHotkeyBox" AutomationProperties.Name="Translate Hotkey" />
+
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Pick region" Style="{StaticResource FieldLabelStyle}" />
+                                    <TextBox Grid.Row="1" Grid.Column="2" x:Name="PickRegionHotkeyBox" AutomationProperties.Name="Pick Region Hotkey" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Text="Dismiss overlay" Style="{StaticResource FieldLabelStyle}" Margin="0,8,0,2" />
+                                    <TextBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" x:Name="DismissHotkeyBox" AutomationProperties.Name="Dismiss Overlay Hotkey" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
 
-                    <TextBlock Text="Source language" Style="{StaticResource FieldLabelStyle}" />
-                    <ComboBox x:Name="SourceLangCombo" Margin="0,0,0,4" SelectionChanged="OnSourceLangChanged" ItemTemplate="{StaticResource LangItemTemplate}" />
+                    <!-- Right Column: Appearance & System -->
+                    <StackPanel Grid.Column="2">
+                        <!-- Card 3: HUD Appearance & Live Preview -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,8">
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Reset"
+                                            Style="{StaticResource CardResetButtonStyle}"
+                                            Click="OnResetAppearanceClick"
+                                            ToolTip="Reset Appearance settings to default"
+                                            AutomationProperties.Name="Reset Appearance Settings" />
+                                    <TextBlock Text="HUD APPEARANCE &amp; PREVIEW"
+                                               Style="{StaticResource SectionHeaderStyle}"
+                                               FontSize="12"
+                                               Margin="0"
+                                               VerticalAlignment="Center" />
+                                </DockPanel>
 
-                    <TextBlock Text="Target language" Style="{StaticResource FieldLabelStyle}" />
-                    <ComboBox x:Name="TargetLangCombo" Margin="0,0,0,6" ItemTemplate="{StaticResource LangItemTemplate}" />
-                    <TextBlock Text="Windows OCR status" Style="{StaticResource FieldLabelStyle}" />
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBlock x:Name="OcrStatusText" TextWrapping="Wrap" FontSize="11" VerticalAlignment="Center" />
-                        <TextBlock x:Name="OcrSettingsLink" Margin="6,0,0,0" VerticalAlignment="Center" FontSize="11" Cursor="Hand" TextDecorations="Underline" Foreground="#2563EB" Visibility="Collapsed" MouseLeftButtonUp="OnOcrSettingsLinkClick">
-                            <Run Text="Open Language settings" />
-                        </TextBlock>
+                                <!-- Live Mini-Preview -->
+                                <Border x:Name="PreviewPill"
+                                        Background="#0A0A0B"
+                                        BorderBrush="#5B8EF0"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="12,8"
+                                        Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <DockPanel Margin="0,0,0,4">
+                                            <TextBlock Text="HUD"
+                                                       DockPanel.Dock="Right"
+                                                       FontSize="10"
+                                                       Foreground="{StaticResource HudMutedBrush}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Text="JA &#x2192; EN-US  [LIVE PREVIEW]"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Foreground="{StaticResource HudAccentBrush}"
+                                                       VerticalAlignment="Center" />
+                                        </DockPanel>
+                                        <TextBlock x:Name="PreviewTextSample"
+                                                   Text="Translated dialogue text sample in game."
+                                                   TextWrapping="Wrap"
+                                                   FontFamily="{StaticResource MonoFontFamily}"
+                                                   FontSize="12" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Text color" Style="{StaticResource FieldLabelStyle}" />
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right"
+                                                    Content="Pick"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Padding="8,2"
+                                                    FontSize="11"
+                                                    Click="PickTextColor"
+                                                    AutomationProperties.Name="Pick Text Color" />
+                                            <Border x:Name="TextColorSwatch" Style="{StaticResource ColorSwatchStyle}" DockPanel.Dock="Left" />
+                                            <TextBlock x:Name="TextColorHexLabel"
+                                                       Style="{StaticResource HudTextBlockStyle}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource MonoFontFamily}"
+                                                       FontSize="11" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Background" Style="{StaticResource FieldLabelStyle}" />
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right"
+                                                    Content="Pick"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Padding="8,2"
+                                                    FontSize="11"
+                                                    Click="PickBackgroundColor"
+                                                    AutomationProperties.Name="Pick Background Color" />
+                                            <Border x:Name="BackgroundColorSwatch" Style="{StaticResource ColorSwatchStyle}" DockPanel.Dock="Left" />
+                                            <TextBlock x:Name="BackgroundColorHexLabel"
+                                                       Style="{StaticResource HudTextBlockStyle}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource MonoFontFamily}"
+                                                       FontSize="11" />
+                                        </DockPanel>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <DockPanel Margin="0,0,0,2">
+                                            <TextBlock x:Name="OpacityLabel"
+                                                       DockPanel.Dock="Right"
+                                                       TextAlignment="Right"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource HudMutedBrush}" />
+                                            <TextBlock Text="Opacity" Style="{StaticResource FieldLabelStyle}" />
+                                        </DockPanel>
+                                        <Slider x:Name="OpacitySlider"
+                                                Minimum="0.5"
+                                                Maximum="1"
+                                                TickFrequency="0.05"
+                                                IsSnapToTickEnabled="True"
+                                                AutomationProperties.Name="Background Opacity" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <DockPanel Margin="0,0,0,2">
+                                            <TextBlock x:Name="FontSizeLabel"
+                                                       DockPanel.Dock="Right"
+                                                       Style="{StaticResource HudTextBlockStyle}"
+                                                       TextAlignment="Right"
+                                                       FontSize="11" />
+                                            <TextBlock Text="Font size" Style="{StaticResource FieldLabelStyle}" />
+                                        </DockPanel>
+                                        <Slider x:Name="FontSizeSlider"
+                                                Minimum="10"
+                                                Maximum="14"
+                                                TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                AutomationProperties.Name="Font Size" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Auto-hide: Label on left, centered input box on right -->
+                                <DockPanel Margin="0,2,0,6">
+                                    <TextBox x:Name="AutoHideBox"
+                                             DockPanel.Dock="Right"
+                                             Width="64"
+                                             HorizontalContentAlignment="Center"
+                                             AutomationProperties.Name="Auto-hide Duration In Seconds" />
+                                    <TextBlock Text="Auto-hide (sec, 0 = off):"
+                                               Style="{StaticResource FieldLabelStyle}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0" />
+                                </DockPanel>
+
+                                <CheckBox x:Name="RememberOverlayPositionBox"
+                                          Content="Remember overlay position after drag"
+                                          Margin="0,4,0,0"
+                                          AutomationProperties.Name="Remember Overlay Position" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 4: General -->
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="GENERAL &amp; SYSTEM"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="12"
+                                           Margin="0,0,0,8" />
+                                <DockPanel Margin="0,0,0,8">
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Open logs"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="10,2"
+                                            FontSize="11"
+                                            Click="OnOpenLogFolderClick"
+                                            AutomationProperties.Name="Open Logs Folder" />
+                                    <TextBlock x:Name="LogPathText"
+                                               TextTrimming="CharacterEllipsis"
+                                               FontSize="11"
+                                               Foreground="{StaticResource HudMutedBrush}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,10,0" />
+                                </DockPanel>
+                                <CheckBox x:Name="StartWithWindowsBox"
+                                          Content="Start with Windows automatically"
+                                          AutomationProperties.Name="Start with Windows" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-
-                    <TextBlock Text="Hotkeys" Style="{StaticResource SectionHeaderStyle}" />
-                    <Grid Margin="0,0,0,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="8" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Translate" Style="{StaticResource FieldLabelStyle}" />
-                        <TextBox Grid.Row="1" Grid.Column="0" x:Name="TranslateHotkeyBox" Margin="0,0,0,0" />
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="Pick region" Style="{StaticResource FieldLabelStyle}" />
-                        <TextBox Grid.Row="1" Grid.Column="2" x:Name="PickRegionHotkeyBox" />
-                        <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Text="Dismiss overlay" Style="{StaticResource FieldLabelStyle}" Margin="0,4,0,0" />
-                        <TextBox Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" x:Name="DismissHotkeyBox" />
-                    </Grid>
-                    <TextBlock Text="Overlay" Style="{StaticResource SectionHeaderStyle}" />
-                    <TextBlock Text="Text color" Style="{StaticResource FieldLabelStyle}" />
-                    <DockPanel Margin="0,0,0,4">
-                        <Button Content="Pick" Style="{StaticResource SecondaryButtonStyle}" DockPanel.Dock="Right" Margin="6,0,0,0" Click="PickTextColor" />
-                        <Border x:Name="TextColorSwatch" Style="{StaticResource ColorSwatchStyle}" DockPanel.Dock="Left" />
-                        <TextBlock x:Name="TextColorHexLabel" Style="{StaticResource HudTextBlockStyle}" VerticalAlignment="Center" FontFamily="{StaticResource MonoFontFamily}" FontSize="11" Margin="0,0,6,0" />
-                    </DockPanel>
-
-                    <TextBlock Text="Background color" Style="{StaticResource FieldLabelStyle}" />
-                    <DockPanel Margin="0,0,0,4">
-                        <Button Content="Pick" Style="{StaticResource SecondaryButtonStyle}" DockPanel.Dock="Right" Margin="6,0,0,0" Click="PickBackgroundColor" />
-                        <Border x:Name="BackgroundColorSwatch" Style="{StaticResource ColorSwatchStyle}" DockPanel.Dock="Left" />
-                        <TextBlock x:Name="BackgroundColorHexLabel" Style="{StaticResource HudTextBlockStyle}" VerticalAlignment="Center" FontFamily="{StaticResource MonoFontFamily}" FontSize="11" Margin="0,0,6,0" />
-                    </DockPanel>
-
-                    <TextBlock Text="Background opacity" Style="{StaticResource FieldLabelStyle}" />
-                    <DockPanel Margin="0,0,0,4">
-                        <TextBlock x:Name="OpacityLabel" DockPanel.Dock="Right" Width="36" TextAlignment="Right" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource HudMutedBrush}" />
-                        <Slider x:Name="OpacitySlider" Minimum="0.5" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True" />
-                    </DockPanel>
-
-                    <TextBlock Text="Font size (10-14)" Style="{StaticResource FieldLabelStyle}" />
-                    <DockPanel Margin="0,0,0,4">
-                        <TextBlock x:Name="FontSizeLabel" Style="{StaticResource HudTextBlockStyle}" DockPanel.Dock="Right" Width="28" TextAlignment="Right" VerticalAlignment="Center" />
-                        <Slider x:Name="FontSizeSlider" Minimum="10" Maximum="14" TickFrequency="1" IsSnapToTickEnabled="True" />
-                    </DockPanel>
-
-                    <TextBlock Text="Auto-hide (seconds, 0 = off)" Style="{StaticResource FieldLabelStyle}" />
-                    <TextBox x:Name="AutoHideBox" Margin="0,0,0,4" />
-                    <CheckBox x:Name="RememberOverlayPositionBox"
-                              Content="Remember overlay position after drag"
-                              Margin="0,0,0,6" />
-
-                    <TextBlock Text="General" Style="{StaticResource SectionHeaderStyle}" />
-                    <TextBlock Text="Log file" Style="{StaticResource FieldLabelStyle}" />
-                    <TextBlock x:Name="LogPathText" TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource HudMutedBrush}" Margin="0,0,0,4" />
-                    <Button Content="Open log folder" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Left" Margin="0,0,0,4" Click="OnOpenLogFolderClick" />
-                    <CheckBox x:Name="StartWithWindowsBox" Content="Start with Windows" Margin="0,0,0,4" />
-                </StackPanel>
+                </Grid>
             </ScrollViewer>
 
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
-                <Button Content="Reset defaults" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,6,0" Click="OnResetClick" />
-                <Button Content="Cancel" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,6,0" Click="OnCancelClick" />
-                <Button Content="Save" Style="{StaticResource PrimaryButtonStyle}" Click="OnSaveClick" />
-            </StackPanel>
+            <!-- Bottom Action Buttons & Auto-save Status -->
+            <DockPanel Grid.Row="2" Margin="0,12,0,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left">
+                    <TextBlock x:Name="AutoSaveStatusText"
+                               Text="All changes auto-save"
+                               Foreground="{StaticResource HudMutedBrush}"
+                               FontSize="11"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <Button Content="Reset all"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            MinWidth="85"
+                            Margin="0,0,10,0"
+                            Click="OnResetClick"
+                            ToolTip="Reset all settings to default"
+                            AutomationProperties.Name="Reset All Settings" />
+                    <Button Content="Close"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            MinWidth="85"
+                            Click="OnCloseButtonClick"
+                            AutomationProperties.Name="Close Settings Panel" />
+                </StackPanel>
+            </DockPanel>
         </Grid>
     </Border>
 </Window>
-
-

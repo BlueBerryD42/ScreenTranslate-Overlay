@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using GameTranslateOverlay.Models;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -49,8 +49,8 @@ public sealed class TrayService : IDisposable
         _useFixedRegionItem = CreateCheckItem("Use fixed region (F10)", useFixedRegion, toggleUseFixedRegion);
         menu.Items.Add(_useFixedRegionItem);
         menu.Items.Add(CreateItem("Set Capture Region", setCaptureRegion));
-        menu.Items.Add(BuildLanguageSubmenu("Source language", LanguageCatalog.SourceLanguages, sourceLang, setSourceLang, _sourceLangItems));
-        menu.Items.Add(BuildLanguageSubmenu("Target language", LanguageCatalog.TargetLanguages, targetLang, setTargetLang, _targetLangItems));
+        menu.Items.Add(BuildLanguageSubmenu("Source language", LanguageCatalog.SourceLanguages, sourceLang, setSourceLang, _sourceLangItems, isSource: true));
+        menu.Items.Add(BuildLanguageSubmenu("Target language", LanguageCatalog.TargetLanguages, targetLang, setTargetLang, _targetLangItems, isSource: false));
         _recentRoot = new MenuItem { Header = "Recent translations" };
         menu.Items.Add(_recentRoot);
         menu.Opened += OnContextMenuOpened;
@@ -60,6 +60,8 @@ public sealed class TrayService : IDisposable
         menu.Items.Add(CreateItem("Settings...", openSettings));
         menu.Items.Add(new Separator());
         menu.Items.Add(CreateItem("Exit", exit));
+
+        _icon.TrayMouseDoubleClick += (_, _) => openSettings();
 
         _sourceLang = sourceLang;
         _targetLang = targetLang;
@@ -149,16 +151,20 @@ public sealed class TrayService : IDisposable
         IReadOnlyList<LanguageOption> languages,
         string selectedCode,
         Action<string> onSelected,
-        Dictionary<string, MenuItem> itemMap)
+        Dictionary<string, MenuItem> itemMap,
+        bool isSource = false)
     {
         var submenu = new MenuItem { Header = header };
         foreach (var lang in languages)
         {
+            var isOcrReady = !isSource || Core.OcrEngine.IsLanguageAvailable(lang.Code);
+            var headerText = isOcrReady ? lang.Label : $"{lang.Label} (OCR missing ⚠)";
             var item = new MenuItem
             {
-                Header = lang.Label,
+                Header = headerText,
                 IsCheckable = true,
                 IsChecked = lang.Code.Equals(selectedCode, StringComparison.OrdinalIgnoreCase),
+                ToolTip = isOcrReady ? null : $"Windows OCR package is not installed for {lang.Label}."
             };
             var code = lang.Code;
             item.Click += (_, _) => onSelected(code);

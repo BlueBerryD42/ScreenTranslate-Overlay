@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GameTranslateOverlay.Core;
@@ -22,72 +22,97 @@ public sealed class SettingsService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    private readonly object _lock = new();
+
     public AppSettings Current { get; private set; } = CreateDefaults();
     public SettingsLoadResult LastLoadResult { get; private set; }
 
     public SettingsLoadResult Load()
     {
-        Directory.CreateDirectory(AppConstants.SettingsDirectory);
+        lock (_lock)
+        {
+            Directory.CreateDirectory(AppConstants.SettingsDirectory);
 
-        if (!File.Exists(AppConstants.SettingsFilePath))
-        {
-            Current = CreateDefaults();
-            Save();
-            LastLoadResult = SettingsLoadResult.CreatedDefault;
-            LogService.Instance.Info($"Settings load: {LastLoadResult}");
-            return LastLoadResult;
-        }
+            if (!File.Exists(AppConstants.SettingsFilePath))
+            {
+                Current = CreateDefaults();
+                Save();
+                LastLoadResult = SettingsLoadResult.CreatedDefault;
+                LogService.Instance.Info($"Settings load: {LastLoadResult}");
+                return LastLoadResult;
+            }
 
-        try
-        {
-            var json = File.ReadAllText(AppConstants.SettingsFilePath);
-            var loaded = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
-            Current = MergeWithDefaults(loaded);
-            LastLoadResult = SettingsLoadResult.Loaded;
-            LogService.Instance.Info($"Settings load: {LastLoadResult}");
-            return LastLoadResult;
-        }
-        catch (Exception ex)
-        {
-            LogService.Instance.Error("Settings load failed; restoring defaults", ex);
-            var backupPath = AppConstants.SettingsFilePath + ".bak";
             try
             {
-                if (File.Exists(AppConstants.SettingsFilePath))
-                    File.Copy(AppConstants.SettingsFilePath, backupPath, overwrite: true);
+                var json = File.ReadAllText(AppConstants.SettingsFilePath);
+                var loaded = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
+                Current = MergeWithDefaults(loaded);
+                LastLoadResult = SettingsLoadResult.Loaded;
+                LogService.Instance.Info($"Settings load: {LastLoadResult}");
+                return LastLoadResult;
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore backup failures
-            }
+                LogService.Instance.Error("Settings load failed; restoring defaults", ex);
+                var backupPath = AppConstants.SettingsFilePath + ".bak";
+                try
+                {
+                    if (File.Exists(AppConstants.SettingsFilePath))
+                        File.Copy(AppConstants.SettingsFilePath, backupPath, overwrite: true);
+                }
+                catch
+                {
+                    // ignore backup failures
+                }
 
-            Current = CreateDefaults();
-            Save();
-            LastLoadResult = SettingsLoadResult.RestoredFromCorruption;
-            LogService.Instance.Warn($"Settings load: {LastLoadResult} (backup at {backupPath})");
-            return LastLoadResult;
+                Current = CreateDefaults();
+                Save();
+                LastLoadResult = SettingsLoadResult.RestoredFromCorruption;
+                LogService.Instance.Warn($"Settings load: {LastLoadResult} (backup at {backupPath})");
+                return LastLoadResult;
+            }
         }
     }
 
     public void Save()
     {
-        Directory.CreateDirectory(AppConstants.SettingsDirectory);
-        var json = JsonSerializer.Serialize(Current, JsonOptions);
-        File.WriteAllText(AppConstants.SettingsFilePath, json);
-        LogService.Instance.Info("Settings saved to disk");
+        lock (_lock)
+        {
+            Directory.CreateDirectory(AppConstants.SettingsDirectory);
+            var json = JsonSerializer.Serialize(Current, JsonOptions);
+            var tempPath = Path.Combine(AppConstants.SettingsDirectory, $"config_{Guid.NewGuid():N}.tmp");
+            try
+            {
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, AppConstants.SettingsFilePath, overwrite: true);
+                LogService.Instance.Info("Settings saved to disk (atomic)");
+            }
+            catch (Exception ex)
+            {
+                LogService.Instance.Error("Failed to save settings atomically", ex);
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* ignore */ }
+                throw;
+            }
+        }
     }
 
     public void Update(Action<AppSettings> mutate)
     {
-        mutate(Current);
-        Save();
+        lock (_lock)
+        {
+            mutate(Current);
+            Save();
+        }
     }
 
     public void ResetToDefaults()
     {
-        Current = CreateDefaults();
-        Save();
-        LogService.Instance.Info("Settings reset to defaults");
+        lock (_lock)
+        {
+            Current = CreateDefaults();
+            Save();
+            LogService.Instance.Info("Settings reset to defaults");
+        }
     }
 
     private static AppSettings CreateDefaults() => new();

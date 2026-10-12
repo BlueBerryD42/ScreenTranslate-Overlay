@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using GameTranslateOverlay.Core;
 using GameTranslateOverlay.Models;
@@ -54,6 +54,33 @@ public sealed class TranslationCoordinator
         _trayService = trayService;
         _regionSelector = regionSelector;
         _regionSelector.RegionSelected += OnRegionSelected;
+        _regionSelector.LanguageChanged += OnRegionSelectorLanguageChanged;
+        _overlayWindow.LanguageChanged += OnOverlayLanguageChanged;
+        _overlayWindow.RetranslateRequested += OnOverlayRetranslateRequested;
+    }
+
+    private void OnRegionSelectorLanguageChanged(object? sender, (string? source, string? target) e)
+    {
+        _settingsService.Update(s =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.source))
+                s.SourceLang = e.source;
+            if (!string.IsNullOrWhiteSpace(e.target))
+                s.TargetLang = e.target;
+        });
+
+        _trayService.SyncMenuState(
+            _settingsService.Current.SourceLang,
+            _settingsService.Current.TargetLang,
+            _settingsService.Current.UseFixedRegion);
+
+        _overlayWindow.ApplySettings(_settingsService.Current);
+        LogService.Instance.Info($"Language changed from region selector: Source={_settingsService.Current.SourceLang}, Target={_settingsService.Current.TargetLang}");
+
+        if (!string.IsNullOrWhiteSpace(e.source) && !OcrEngine.IsLanguageAvailable(e.source))
+        {
+            _trayService.ShowBalloon("GameTranslateOverlay", OcrEngine.GetAvailabilityMessage(e.source));
+        }
     }
 
     public async Task CheckQuotaAtStartupAsync()
@@ -79,7 +106,8 @@ public sealed class TranslationCoordinator
     {
         LogService.Instance.Info("BeginPickFixedRegion");
         _pendingRegionAction = PendingRegionAction.SaveFixed;
-        _regionSelector.ShowSelector();
+        var s = _settingsService.Current;
+        _regionSelector.ShowSelector(s.CaptureRegion, s.SourceLang, s.TargetLang);
     }
 
     public void RunTranslateHotkey()
@@ -101,7 +129,7 @@ public sealed class TranslationCoordinator
 
         LogService.Instance.Info("RunTranslateHotkey: mode=quick (region select)");
         _pendingRegionAction = PendingRegionAction.QuickTranslate;
-        _regionSelector.ShowSelector();
+        _regionSelector.ShowSelector(settings.CaptureRegion, settings.SourceLang, settings.TargetLang);
     }
 
     public void DismissOverlay()
@@ -130,6 +158,107 @@ public sealed class TranslationCoordinator
         _translator.InvalidateClient();
         _ocrEngine.InvalidateEngine();
         LogService.Instance.Info("Translation caches cleared");
+    }
+
+    private void OnOverlayLanguageChanged(object? sender, (string? source, string? target) e)
+    {
+        _settingsService.Update(s =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.source))
+                s.SourceLang = e.source;
+            if (!string.IsNullOrWhiteSpace(e.target))
+                s.TargetLang = e.target;
+        });
+
+        _trayService.SyncMenuState(
+            _settingsService.Current.SourceLang,
+            _settingsService.Current.TargetLang,
+            _settingsService.Current.UseFixedRegion);
+
+        LogService.Instance.Info($"Language changed from overlay: Source={_settingsService.Current.SourceLang}, Target={_settingsService.Current.TargetLang}");
+
+        if (!string.IsNullOrWhiteSpace(e.source) && !OcrEngine.IsLanguageAvailable(e.source))
+        {
+            _trayService.ShowBalloon("GameTranslateOverlay", OcrEngine.GetAvailabilityMessage(e.source));
+        }
+
+        var currentText = _overlayWindow.CurrentSourceText;
+        if (!string.IsNullOrWhiteSpace(currentText))
+        {
+            _ = RetranslateCurrentTextAsync(currentText);
+        }
+    }
+
+    private void OnOverlayRetranslateRequested(object? sender, EventArgs e)
+    {
+        var currentText = _overlayWindow.CurrentSourceText;
+        if (!string.IsNullOrWhiteSpace(currentText))
+        {
+            _ = RetranslateCurrentTextAsync(currentText);
+        }
+        else
+        {
+            RunTranslateHotkey();
+        }
+    }
+
+    public async Task RetranslateCurrentTextAsync(string sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText))
+            return;
+
+        if (string.IsNullOrWhiteSpace(_settingsService.Current.DeeplApiKey))
+        {
+            _trayService.ShowBalloon("GameTranslateOverlay", "Configure your DeepL API key in Settings.");
+            return;
+        }
+
+        if (!await EnsureQuotaAllowsTranslateAsync().ConfigureAwait(true))
+            return;
+
+        _overlayWindow.ShowLoadingState();
+
+        try
+        {
+            var sourceLang = _settingsService.Current.SourceLang;
+            var targetLang = _settingsService.Current.TargetLang;
+
+            if (_translationCache.TryGet(sourceLang, targetLang, sourceText, out var cached))
+            {
+                LogService.Instance.Info("Retranslate cache hit");
+                _overlayWindow.SetContent(cached.SourceText, cached.Translation);
+                _overlayWindow.ShowOverlay();
+                return;
+            }
+
+            var translated = await _translator.TranslateAsync(
+                _settingsService.Current.DeeplApiKey,
+                sourceLang,
+                targetLang,
+                sourceText).ConfigureAwait(true);
+
+            LogService.Instance.Info($"Retranslation success: {sourceLang}->{targetLang}, length={translated.Length}");
+            _translationCache.Add(sourceLang, targetLang, sourceText, sourceText, translated);
+            _overlayWindow.SetContent(sourceText, translated);
+            _overlayWindow.ShowOverlay();
+            await RefreshQuotaAfterTranslateAsync().ConfigureAwait(true);
+        }
+        catch (DeepL.QuotaExceededException ex)
+        {
+            LogService.Instance.Error("Retranslate failed: quota exceeded", ex);
+            _usageService.InvalidateCache();
+            _trayService.ShowBalloon("DeepL quota", "DeepL quota exhausted. Upgrade your plan or wait for the next billing period.");
+            ShowOverlayMessage("DeepL quota exhausted.", notifyTray: false);
+        }
+        catch (Exception ex)
+        {
+            LogService.Instance.Error("Retranslate failed", ex);
+            ShowOverlayMessage($"Error: {ex.Message}");
+        }
+        finally
+        {
+            _overlayWindow.SetLoading(false);
+        }
     }
 
     private void OnRegionSelected(object? sender, Int32Rect region)
@@ -241,15 +370,16 @@ public sealed class TranslationCoordinator
         _overlayWindow.ShowAtCaptureRegion(region);
         _overlayWindow.ShowLoadingState();
 
-        string? capturePath = null;
-        string? ocrImagePath = null;
+        System.Drawing.Bitmap? captureBitmap = null;
+        System.Drawing.Bitmap? ocrBitmap = null;
+        var wasPreprocessed = false;
+
         try
         {
-            capturePath = ScreenCapture.CaptureRegionToTempFile(region.X, region.Y, region.W, region.H);
-            LogService.Instance.Info($"Screen capture saved: {capturePath}");
+            captureBitmap = ScreenCapture.CaptureRegion(region.X, region.Y, region.W, region.H);
+            ocrBitmap = OcrImagePreprocessor.Prepare(captureBitmap, out wasPreprocessed);
 
-            ocrImagePath = OcrImagePreprocessor.Prepare(capturePath);
-            var ocrRaw = await _ocrEngine.RecognizeAsync(ocrImagePath, sourceLang).ConfigureAwait(true);
+            var ocrRaw = await _ocrEngine.RecognizeAsync(ocrBitmap, sourceLang).ConfigureAwait(true);
             var rawPreview = PreviewText(ocrRaw, 80);
             LogService.Instance.Info($"OCR raw: length={ocrRaw.Length}, preview=\"{rawPreview}\"");
 
@@ -259,9 +389,9 @@ public sealed class TranslationCoordinator
 
             if (string.IsNullOrWhiteSpace(ocrText))
             {
-                SaveDebugCapture(capturePath, "last_capture.png");
-                if (ocrImagePath is not null && ocrImagePath != capturePath)
-                    SaveDebugCapture(ocrImagePath, "last_capture_prep.png");
+                SaveDebugCapture(captureBitmap, "last_capture.png");
+                if (wasPreprocessed && ocrBitmap is not null)
+                    SaveDebugCapture(ocrBitmap, "last_capture_prep.png");
 
                 LogService.Instance.Warn("Translate pipeline: no text detected after OCR");
                 _consecutiveEmptyOcr++;
@@ -325,9 +455,9 @@ public sealed class TranslationCoordinator
             _overlayWindow.SetLoading(false);
             _busy = false;
             _busyNotified = false;
-            TryDeleteTempFile(capturePath);
-            if (ocrImagePath is not null && ocrImagePath != capturePath)
-                TryDeleteTempFile(ocrImagePath);
+            if (wasPreprocessed)
+                ocrBitmap?.Dispose();
+            captureBitmap?.Dispose();
         }
     }
 
@@ -377,27 +507,19 @@ public sealed class TranslationCoordinator
             _trayService.ShowBalloon("GameTranslateOverlay", message);
     }
 
-    private static void SaveDebugCapture(string sourcePath, string fileName)
+    private static void SaveDebugCapture(System.Drawing.Bitmap bitmap, string fileName)
     {
         var debugPath = Path.Combine(LogService.Instance.DebugDirectory, fileName);
         LogService.Instance.EnsureDebugDirectory();
         try
         {
-            File.Copy(sourcePath, debugPath, overwrite: true);
+            bitmap.Save(debugPath, System.Drawing.Imaging.ImageFormat.Png);
             LogService.Instance.Warn($"OCR empty; debug capture saved: {debugPath}");
         }
-        catch (Exception copyEx)
+        catch (Exception saveEx)
         {
-            LogService.Instance.Warn($"OCR empty; failed to save debug capture ({fileName}): {copyEx.Message}");
+            LogService.Instance.Warn($"OCR empty; failed to save debug capture ({fileName}): {saveEx.Message}");
         }
-    }
-
-    private static void TryDeleteTempFile(string? path)
-    {
-        if (path is null || !File.Exists(path))
-            return;
-
-        try { File.Delete(path); } catch { /* ignore */ }
     }
 
     private static string PreviewText(string text, int maxChars)
